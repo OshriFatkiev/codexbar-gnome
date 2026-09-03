@@ -14,14 +14,54 @@ import {
   clearToken,
   nullTokenSchema,
 } from "./secret.js";
+import {
+  adoptCustomProviders,
+  buildCliCommand,
+  CLI_SOURCES,
+  DIRECT_API,
+  parseGeneratedCommand,
+} from "./providerSources.js";
+
+/**
+ * Human label for a source. Looked up lazily so gettext runs after the
+ * translation domain is bound, not at module load.
+ * @param {string} source
+ * @returns {string}
+ */
+const sourceLabel = (source) =>
+  ({
+    [DIRECT_API]: _("Direct API (session cookies)"),
+    auto: _("Auto"),
+    web: _("Web dashboard"),
+    cli: _("Local CLI"),
+    oauth: _("OAuth"),
+    // Qualified because it would otherwise read as a second "Direct API" on
+    // the two rows that offer both.
+    api: _("Provider API (via CLI)"),
+  })[source] || source;
 
 /**
  * Predefined providers list.
  * Lista de proveedores predefinidos.
+ *
+ * `supportsDirectApi` marks the providers this extension can query itself with
+ * a keyring cookie; the rest reach their source through codexbar-cli.
  */
 const PREDEFINED_PROVIDERS = [
-  { id: "codex", name: "Codex", useApi: true, defaultCommand: "" },
-  { id: "ollama", name: "Ollama Cloud", useApi: true, defaultCommand: "" },
+  {
+    id: "codex",
+    name: "Codex",
+    useApi: true,
+    supportsDirectApi: true,
+    defaultCommand: "",
+  },
+  {
+    id: "ollama",
+    name: "Ollama Cloud",
+    useApi: true,
+    supportsDirectApi: true,
+    defaultCommand: "",
+  },
   {
     id: "claude",
     name: "Claude",
@@ -460,7 +500,7 @@ const CodexBarPrefsPage = GObject.registerClass(
       const group = new Adw.PreferencesGroup({
         title: _("AI Providers"),
         description: _(
-          "Enable providers. Codex uses Direct API, Antigravity needs the plugin and others use codexbar-cli with --source api.",
+          "Enable providers and pick how each one connects. Direct API uses session cookies from your keyring; the other choices run codexbar-cli with that --source. Antigravity also needs the plugin.",
         ),
       });
 
@@ -472,6 +512,19 @@ const CodexBarPrefsPage = GObject.registerClass(
         activeProviders = [];
       }
 
+      const adopted = adoptCustomProviders(
+        activeProviders,
+        PREDEFINED_PROVIDERS,
+      );
+      // Persist straight away rather than waiting for the user to touch a
+      // control: until this lands in settings the panel keeps reading the old
+      // custom-* ids, and those are what cost the row its logo.
+      const adoptedJson = JSON.stringify(adopted);
+      if (adoptedJson !== JSON.stringify(activeProviders)) {
+        this._settings.set_string("providers", adoptedJson);
+      }
+      activeProviders = adopted;
+
       const saveProviders = async () => {
         const newProviders = [];
         for (const row of this._providerRows) {
@@ -481,6 +534,7 @@ const CodexBarPrefsPage = GObject.registerClass(
               name: row._name,
               command: row._commandEntry.get_text(),
               useApi: row._useApi,
+              ...(row._source ? { source: row._source } : {}),
             });
 
             if (row._useApi) {
@@ -522,7 +576,32 @@ const CodexBarPrefsPage = GObject.registerClass(
 
         row._id = activeData ? activeData.id : info.id;
         row._name = info.name;
-        row._useApi = info.useApi;
+
+        // Which sources this row offers, and which one it starts on. Only
+        // predefined rows get a selector - a custom provider's command is
+        // whatever the user typed, so claiming a source for it would be a
+        // guess. Saved configs predate `source`, so fall back to reading it
+        // off the stored command (or the Direct API flag) before the default.
+        const sourceOptions = (
+          info.supportsDirectApi ? [DIRECT_API] : []
+        ).concat(CLI_SOURCES);
+
+        const storedSource =
+          activeData?.source ||
+          (activeData?.useApi ? DIRECT_API : null) ||
+          parseGeneratedCommand(activeData?.command)?.source ||
+          (info.useApi ? DIRECT_API : null) ||
+          parseGeneratedCommand(info.defaultCommand)?.source ||
+          "cli";
+
+        if (isPredefined) {
+          row._source = sourceOptions.includes(storedSource)
+            ? storedSource
+            : sourceOptions[0];
+        } else {
+          row._source = null;
+        }
+        row._useApi = row._source === DIRECT_API;
 
         const enabledSwitch = new Gtk.Switch({
           active: isEnabled,
@@ -545,7 +624,57 @@ const CodexBarPrefsPage = GObject.registerClass(
           margin_end: 12,
         });
 
-        if (info.useApi) {
+        // Show the section the chosen source needs, and keep the command in
+        // sync with it. A command the user has hand-edited is left alone -
+        // only one we generated (or an empty one) gets rewritten.
+        const applySource = (source, { rewriteCommand = true } = {}) => {
+          row._source = source;
+          row._useApi = source === DIRECT_API;
+          apiBox.visible = row._useApi;
+          cliBox.visible = !row._useApi;
+
+          if (rewriteCommand && !row._useApi) {
+            const current = row._commandEntry.get_text();
+            if (!current.trim() || parseGeneratedCommand(current)) {
+              row._commandEntry.set_text(buildCliCommand(info.id, source));
+            }
+          }
+        };
+
+        if (isPredefined) {
+          const sourceRow = new Gtk.Box({ spacing: 6 });
+          sourceRow.append(
+            new Gtk.Label({
+              label: _("Connection:"),
+              xalign: 0,
+              valign: Gtk.Align.CENTER,
+            }),
+          );
+
+          const sourceDropdown = new Gtk.DropDown({
+            model: Gtk.StringList.new(sourceOptions.map(sourceLabel)),
+            selected: sourceOptions.indexOf(row._source),
+            valign: Gtk.Align.CENTER,
+            hexpand: true,
+          });
+          sourceDropdown.connect("notify::selected", () => {
+            const picked = sourceOptions[sourceDropdown.get_selected()];
+            if (!picked || picked === row._source) return;
+            applySource(picked);
+            saveProviders();
+          });
+
+          sourceRow.append(sourceDropdown);
+          box.append(sourceRow);
+        }
+
+        const apiBox = new Gtk.Box({
+          orientation: Gtk.Orientation.VERTICAL,
+          spacing: 6,
+        });
+        // Built only where Direct API is reachable, so the other rows don't
+        // each fire a pointless keyring lookup for a token they can't use.
+        if (info.supportsDirectApi) {
           // For Direct API providers like Codex
           // Para proveedores de API directa como Codex
           const tokenEntry = new Gtk.PasswordEntry({
@@ -588,24 +717,29 @@ const CodexBarPrefsPage = GObject.registerClass(
             });
           });
 
-          box.append(
+          apiBox.append(
             new Gtk.Label({
               label: _("Session Cookies:"),
               xalign: 0,
               css_classes: ["caption"],
             }),
           );
-          box.append(tokenEntry);
-          box.append(btnBox);
-          box.append(
+          apiBox.append(tokenEntry);
+          apiBox.append(btnBox);
+          apiBox.append(
             new Gtk.Label({
               label: _("Manual entry: Paste your session cookies here."),
               xalign: 0,
               css_classes: ["dim-label"],
             }),
           );
-          row._commandEntry = new Gtk.Entry({ text: "" }); // Dummy
-        } else {
+        }
+
+        const cliBox = new Gtk.Box({
+          orientation: Gtk.Orientation.VERTICAL,
+          spacing: 6,
+        });
+        {
           const commandEntry = new Gtk.Entry({
             placeholder_text: _("CLI Command (e.g. codexbar --provider ...)"),
             text: command,
@@ -625,14 +759,18 @@ const CodexBarPrefsPage = GObject.registerClass(
               css_classes: ["flat"],
             });
             resetBtn.connect("clicked", () => {
-              commandEntry.set_text(info.defaultCommand);
+              commandEntry.set_text(
+                row._source && row._source !== DIRECT_API
+                  ? buildCliCommand(info.id, row._source)
+                  : info.defaultCommand,
+              );
               saveProviders();
             });
             labelBox.append(resetBtn);
           }
 
-          box.append(labelBox);
-          box.append(commandEntry);
+          cliBox.append(labelBox);
+          cliBox.append(commandEntry);
 
           if (info.id === "antigravity") {
             const hasLsof = !!GLib.find_program_in_path("lsof");
@@ -654,7 +792,7 @@ const CodexBarPrefsPage = GObject.registerClass(
                 css_classes: ["dim-label"],
               });
               lsofLabel.set_margin_top(6);
-              box.append(lsofLabel);
+              cliBox.append(lsofLabel);
             }
 
             // Antigravity SSL certificate setup instruction
@@ -668,9 +806,15 @@ const CodexBarPrefsPage = GObject.registerClass(
               css_classes: ["dim-label"],
             });
             certLabel.set_margin_top(12);
-            box.append(certLabel);
+            cliBox.append(certLabel);
           }
         }
+
+        box.append(apiBox);
+        box.append(cliBox);
+        // Visibility only: rewriting here would fire the entry's "changed"
+        // handler and save a half-built row list.
+        applySource(row._source, { rewriteCommand: false });
 
         if (!isPredefined) {
           const deleteBtn = new Gtk.Button({

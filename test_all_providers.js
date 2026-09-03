@@ -5,6 +5,11 @@ import {
   normalizeDetailSections,
   UsageApiClient,
 } from "./usageApi.js";
+import {
+  adoptCustomProviders,
+  buildCliCommand,
+  parseGeneratedCommand,
+} from "./providerSources.js";
 
 const client = new UsageApiClient();
 
@@ -645,3 +650,94 @@ if (deriveCreditsPercent(normalizeDetailSections(normalizedDashboard.usage.detai
   throw new Error("Expected deriveCreditsPercent to be null for a provider with no details");
 }
 console.log("✓ deriveCreditsPercent is null when there's no parseable API key budget or Credits section");
+
+// --- Provider connection sources -------------------------------------------
+
+const KNOWN_PROVIDERS = [
+  { id: "codex", name: "Codex" },
+  { id: "claude", name: "Claude" },
+];
+
+if (buildCliCommand("claude", "oauth") !==
+    "codexbar --provider claude --source oauth --format json") {
+  throw new Error(`Unexpected generated command: ${buildCliCommand("claude", "oauth")}`);
+}
+for (const source of ["auto", "web", "cli", "oauth", "api"]) {
+  const parsed = parseGeneratedCommand(buildCliCommand("claude", source));
+  if (!parsed || parsed.cliId !== "claude" || parsed.source !== source) {
+    throw new Error(`buildCliCommand/parseGeneratedCommand failed to round-trip ${source}`);
+  }
+}
+console.log("✓ buildCliCommand round-trips through parseGeneratedCommand for every source");
+
+// The form users actually have saved: absolute path plus the `usage` subcommand.
+const absolute = parseGeneratedCommand(
+  "/usr/local/bin/codexbar usage --provider claude --source oauth --format json",
+);
+if (!absolute || absolute.cliId !== "claude" || absolute.source !== "oauth") {
+  throw new Error("Expected an absolute path with `usage` to parse");
+}
+console.log("✓ parseGeneratedCommand accepts an absolute binary path and the usage subcommand");
+
+if (parseGeneratedCommand("codexbar --provider claude --source oauth --format json --account work")) {
+  throw new Error("Expected a command with extra flags to be rejected");
+}
+if (parseGeneratedCommand("codexbar --provider claude --source nonsense --format json")) {
+  throw new Error("Expected an unknown source to be rejected");
+}
+if (parseGeneratedCommand("") || parseGeneratedCommand(undefined)) {
+  throw new Error("Expected empty/undefined commands to be rejected");
+}
+console.log("✓ parseGeneratedCommand rejects extra flags, unknown sources, and empty input");
+
+const handRolled = [
+  {
+    id: "custom-1788415760189",
+    name: "Codex OAuth",
+    command: "/usr/local/bin/codexbar usage --provider codex --source oauth --format json",
+    useApi: false,
+  },
+  {
+    id: "custom-1788415778976",
+    name: "Claude OAuth",
+    command: "/usr/local/bin/codexbar usage --provider claude --source oauth --format json",
+    useApi: false,
+  },
+];
+const adopted = adoptCustomProviders(handRolled, KNOWN_PROVIDERS);
+if (adopted.map((p) => p.id).join(",") !== "codex,claude") {
+  throw new Error(`Expected custom rows to be adopted as codex,claude - got ${adopted.map((p) => p.id).join(",")}`);
+}
+if (adopted.some((p) => p.source !== "oauth" || p.useApi !== false)) {
+  throw new Error("Expected adopted rows to keep source=oauth and useApi=false");
+}
+if (handRolled[0].id !== "custom-1788415760189") {
+  throw new Error("adoptCustomProviders must not mutate its input");
+}
+console.log("✓ adoptCustomProviders folds hand-rolled OAuth rows onto their predefined ids");
+
+const withExtraFlags = adoptCustomProviders(
+  [{ id: "custom-1", name: "Claude work", command: "codexbar --provider claude --source oauth --format json --account work" }],
+  KNOWN_PROVIDERS,
+);
+if (withExtraFlags[0].id !== "custom-1") {
+  throw new Error("Expected a command with --account to be left as a custom provider");
+}
+console.log("✓ adoptCustomProviders leaves deliberately custom commands alone");
+
+const alreadyConfigured = adoptCustomProviders(
+  [
+    { id: "claude", name: "Claude", command: buildCliCommand("claude", "cli"), useApi: false },
+    { id: "custom-2", name: "Claude OAuth", command: buildCliCommand("claude", "oauth"), useApi: false },
+  ],
+  KNOWN_PROVIDERS,
+);
+if (alreadyConfigured[1].id !== "custom-2") {
+  throw new Error("Expected no adoption when the predefined provider is already configured");
+}
+console.log("✓ adoptCustomProviders won't collide with an already-configured predefined provider");
+
+if (adoptCustomProviders(null, KNOWN_PROVIDERS).length !== 0) {
+  throw new Error("Expected adoptCustomProviders(null) to return an empty list");
+}
+console.log("✓ adoptCustomProviders defends against a malformed provider list");

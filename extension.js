@@ -23,6 +23,26 @@ function logDev(msg) {
   console.log(`[CodexBar] ${msg}`);
 }
 
+// Secondary text keeps the theme's foreground colour and is dimmed with actor
+// opacity. St has no CSS `opacity`, and the shell dims text with per-theme
+// `rgba()` foregrounds only because it ships separate light and dark
+// stylesheets — an extension with a single stylesheet cannot.
+const SECONDARY_TEXT_OPACITY = 200;
+
+/**
+ * Build a dimmed secondary label.
+ * @param {object} params Extra St.Label properties.
+ * @returns {St.Label}
+ */
+function subtitleLabel(params) {
+  const label = new St.Label({
+    style_class: "codexbar-usage-subtitle",
+    ...params,
+  });
+  label.opacity = SECONDARY_TEXT_OPACITY;
+  return label;
+}
+
 /**
  * Main extension class for CodexBar.
  * Clase principal de la extensión para CodexBar.
@@ -728,16 +748,13 @@ export default class CodexBarExtension extends Extension {
         vertical: false,
         x_expand: true,
       });
-      accountDetails.add_child(
-        new St.Label({ text: accText, style_class: "codexbar-usage-subtitle" }),
-      );
+      accountDetails.add_child(subtitleLabel({ text: accText }));
       if (usage.planType) {
         const planText =
           usage.planType.charAt(0).toUpperCase() + usage.planType.slice(1);
         accountDetails.add_child(
-          new St.Label({
+          subtitleLabel({
             text: planText,
-            style_class: "codexbar-usage-subtitle",
             x_align: Clutter.ActorAlign.END,
             x_expand: true,
           }),
@@ -752,10 +769,7 @@ export default class CodexBarExtension extends Extension {
           minute: "2-digit",
         });
         accountBox.add_child(
-          new St.Label({
-            text: _("Updated %s").format(dateStr),
-            style_class: "codexbar-usage-subtitle",
-          }),
+          subtitleLabel({ text: _("Updated %s").format(dateStr) }),
         );
       }
       this._contentBox.add_child(accountBox);
@@ -837,16 +851,10 @@ export default class CodexBarExtension extends Extension {
         this._contentBox.add_child(progressContainer);
 
         const statsBox = new St.BoxLayout({ vertical: false, x_expand: true });
+        statsBox.add_child(subtitleLabel({ text: labelText }));
         statsBox.add_child(
-          new St.Label({
-            text: labelText,
-            style_class: "codexbar-usage-subtitle",
-          }),
-        );
-        statsBox.add_child(
-          new St.Label({
+          subtitleLabel({
             text: tierData.resetDescription || "",
-            style_class: "codexbar-usage-subtitle",
             x_align: Clutter.ActorAlign.END,
             x_expand: true,
           }),
@@ -860,21 +868,19 @@ export default class CodexBarExtension extends Extension {
             const roundedReserve = Math.round(pace.reservePercent);
             const paceBox = new St.BoxLayout({ vertical: false, x_expand: true });
             paceBox.add_child(
-              new St.Label({
+              subtitleLabel({
                 text:
                   roundedReserve >= 0
                     ? _("%d%% in reserve").format(roundedReserve)
                     : _("%d%% over pace").format(Math.abs(roundedReserve)),
-                style_class: "codexbar-usage-subtitle",
               }),
             );
             paceBox.add_child(
-              new St.Label({
+              subtitleLabel({
                 text:
                   roundedReserve >= 0
                     ? _("Lasts until reset")
                     : _("May run out before reset"),
-                style_class: "codexbar-usage-subtitle",
                 x_align: Clutter.ActorAlign.END,
                 x_expand: true,
               }),
@@ -905,12 +911,11 @@ export default class CodexBarExtension extends Extension {
         }),
       );
       creditsBox.add_child(
-        new St.Label({
+        subtitleLabel({
           text:
             creditCount === 1
               ? _("1 available")
               : _("%d available").format(creditCount),
-          style_class: "codexbar-usage-subtitle",
         }),
       );
       this._contentBox.add_child(creditsBox);
@@ -929,6 +934,7 @@ export default class CodexBarExtension extends Extension {
         style_class: "codexbar-cost-title",
         x_align: Clutter.ActorAlign.CENTER,
       });
+      costTitle.opacity = SECONDARY_TEXT_OPACITY;
       costBox.add_child(costTitle);
 
       let formattedAmount = "";

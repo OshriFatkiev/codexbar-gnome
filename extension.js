@@ -72,6 +72,7 @@ export default class CodexBarExtension extends Extension {
     this._iconFill = new St.Widget({
       style_class: "codexbar-panel-icon-fill",
       x_expand: false,
+      y_align: Clutter.ActorAlign.CENTER,
       width: 0,
     });
     this._iconBox.add_child(this._iconFill);
@@ -641,9 +642,8 @@ export default class CodexBarExtension extends Extension {
     // Apply fill to panel icon based on ACTIVE provider
     // Aplicar relleno al icono del panel basado en el proveedor ACTIVO
     if (this._iconFill) {
-      // Interior width of the box (20px - 2*1.5px border - 2*1px padding = 15px)
-      // Increased to 18 to ensure it looks "fuller" on various scales
-      const totalFillWidth = 18;
+      // Interior width of the box (15px - 2*1px border - 2*1px padding = 11px)
+      const totalFillWidth = 11;
       const fillWidth = Math.max(
         1,
         Math.min(

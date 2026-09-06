@@ -5,6 +5,11 @@
     <value nick="remaining" value="1"/>
   </enum>
 
+  <enum id="org.gnome.shell.extensions.codexbar.PanelProviders">
+    <value nick="active" value="0"/>
+    <value nick="all" value="1"/>
+  </enum>
+
   <schema id="org.gnome.shell.extensions.codexbar" path="/org/gnome/shell/extensions/codexbar/">
     <key name="refresh-interval" type="i">
       <default>15</default>
@@ -45,6 +50,14 @@
     <key name="dev-custom-output-json" type="s">
       <default>'[]'</default>
       <summary>Developer mock JSON output</summary>
+    </key>
+    <key name="panel-show-logo" type="b">
+      <default>true</default>
+      <summary>Whether to show the active provider's logo in the panel</summary>
+    </key>
+    <key name="panel-providers" enum="org.gnome.shell.extensions.codexbar.PanelProviders">
+      <default>'active'</default>
+      <summary>Show only the selected provider, or every provider collapsed to its most constrained window</summary>
     </key>
   </schema>
 </schemalist>

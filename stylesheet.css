@@ -1,18 +1,3 @@
-.codexbar-panel-icon-box {
-    height: 7px;
-    width: 15px;
-    border: 1px solid rgba(255,255,255,0.75);
-    border-radius: 2px;
-    padding: 1px;
-    margin: 0 4px;
-}
-
-.codexbar-panel-icon-fill {
-    height: 3px;
-    background-color: rgba(255,255,255,0.75);
-    border-radius: 1px;
-}
-
 .codexbar-header-button {
     padding: 4px;
     border-radius: 4px;
@@ -153,4 +138,42 @@
 .codexbar-cost-value {
     font-size: 1.8em;
     font-weight: bold;
+}
+
+.codexbar-panel-box {
+    spacing: 4px;
+}
+
+.codexbar-panel-logo {
+    icon-size: 16px;
+    -st-icon-style: symbolic;
+}
+
+/* One provider: logo plus its window metrics. */
+.codexbar-panel-group {
+    spacing: 4px;
+    padding: 0 3px;
+}
+
+/* Percentage plus its bar, stacked. */
+.codexbar-panel-metric {
+    spacing: 2px;
+}
+
+.codexbar-panel-label {
+    font-size: 0.9em;
+    font-feature-settings: "tnum";
+}
+
+/* Track stretches to the label width above it; the fill is sized in JS. */
+.codexbar-panel-track {
+    height: 2px;
+    background-color: rgba(127, 127, 127, 0.35);
+    border-radius: 1px;
+}
+
+.codexbar-panel-track-fill {
+    height: 2px;
+    background-color: rgba(255, 255, 255, 0.85);
+    border-radius: 1px;
 }

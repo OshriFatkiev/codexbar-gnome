@@ -23,11 +23,30 @@ function logDev(msg) {
   console.log(`[CodexBar] ${msg}`);
 }
 
+/**
+ * Set visibility only when it actually changes.
+ *
+ * Hiding and re-showing an actor forces a relayout, which resets measured
+ * widths the panel bars are sized against. Assigning unconditionally on every
+ * refresh made the bars twitch on each update.
+ *
+ * @param {Clutter.Actor} actor
+ * @param {boolean} visible
+ */
+function setVisible(actor, visible) {
+  if (actor && actor.visible !== visible) actor.visible = visible;
+}
+
 // Secondary text keeps the theme's foreground colour and is dimmed with actor
 // opacity. St has no CSS `opacity`, and the shell dims text with per-theme
 // `rgba()` foregrounds only because it ships separate light and dark
 // stylesheets — an extension with a single stylesheet cannot.
 const SECONDARY_TEXT_OPACITY = 200;
+
+// When the panel collapses a provider to one window it shows the shortest one,
+// unless a longer window has reached this much usage - at which point it is
+// close enough to exhaustion to be worth taking the slot.
+const PANEL_ESCALATE_USED_PERCENT = 95;
 
 /**
  * Build a dimmed secondary label.
@@ -62,21 +81,18 @@ export default class CodexBarExtension extends Extension {
     // El botón principal (el del uso)
     this._indicator = new PanelMenu.Button(0.0, _("CodexBar"), false);
 
-    // Icon container with progress fill
-    // Contenedor del icono con relleno de progreso
-    this._iconBox = new St.BoxLayout({
-      style_class: "codexbar-panel-icon-box",
+    // Panel content: one group per provider shown, e.g. [logo] 5h 51% 7d 60%.
+    this._panelBox = new St.BoxLayout({
       vertical: false,
       y_align: Clutter.ActorAlign.CENTER,
+      style_class: "codexbar-panel-box",
     });
-    this._iconFill = new St.Widget({
-      style_class: "codexbar-panel-icon-fill",
-      x_expand: false,
-      y_align: Clutter.ActorAlign.CENTER,
-      width: 0,
-    });
-    this._iconBox.add_child(this._iconFill);
-    this._indicator.add_child(this._iconBox);
+    // One group per provider shown, each holding a logo and up to two metrics
+    // (a percentage with a thin bar beneath it). Groups are allocated lazily in
+    // _ensurePanelGroups and reused, so a refresh never rebuilds actors.
+    this._panelGroups = [];
+
+    this._indicator.add_child(this._panelBox);
 
     // Header section of the popup menu
     // Sección de cabecera del menú desplegable (el que aparece cuando clicas)
@@ -147,6 +163,8 @@ export default class CodexBarExtension extends Extension {
       "changed::refresh-interval", () => this._onSettingsChanged(),
       "changed::display-mode", () => this._updateUI(),
       "changed::show-logos", () => this._updateUI(),
+      "changed::panel-show-logo", () => this._updateUI(),
+      "changed::panel-providers", () => this._updateUI(),
       "changed::show-pacing-info", () => this._updateUI(),
       "changed::show-provider-details", () => this._updateUI(),
       "changed::first-run", () => this._updateUI(),
@@ -197,13 +215,13 @@ export default class CodexBarExtension extends Extension {
 
     // Step 5: Destroy all UI elements and the indicator
     // Paso 5: Destruir todos los elementos de la interfaz y el indicador
-    if (this._iconFill) {
-      this._iconFill.destroy();
-      this._iconFill = null;
+    if (this._panelGroups) {
+      this._panelGroups.forEach((g) => g.box.destroy());
+      this._panelGroups = null;
     }
-    if (this._iconBox) {
-      this._iconBox.destroy();
-      this._iconBox = null;
+    if (this._panelBox) {
+      this._panelBox.destroy();
+      this._panelBox = null;
     }
     if (this._headerTitle) {
       this._headerTitle.destroy();
@@ -558,11 +576,6 @@ export default class CodexBarExtension extends Extension {
       return;
     }
 
-    // Recalculate active usage for the panel icon (average of all tiers)
-    // Recalcular el uso activo para el icono del panel (media de todos los niveles)
-    let totalPercent = 0;
-    let tierCount = 0;
-
     const activeData = this._providersData[this._activeProviderIndex];
     // A tier with usedPercent:0 and no windowSeconds isn't a real usage window
     // (e.g. OpenRouter's balance placeholder) - derive a meaningful percent from
@@ -572,30 +585,6 @@ export default class CodexBarExtension extends Extension {
     );
     const isDegenerateTier = (tierData) =>
       !!tierData && !tierData.windowSeconds && tierData.usedPercent === 0;
-
-    if (activeData && activeData.data && activeData.data.usage) {
-      const usage = activeData.data.usage;
-      const tiers = ["primary", "secondary", "tertiary", "quaternary"];
-
-      tiers.forEach((tier) => {
-        if (usage[tier] && usage[tier].usedPercent !== undefined) {
-          if (isDegenerateTier(usage[tier]) && creditsPercent === null) return;
-          let p = isDegenerateTier(usage[tier])
-            ? creditsPercent
-            : this._normalizePercent(usage[tier].usedPercent);
-          totalPercent += displayMode === "remaining" ? 100 - p : p;
-          tierCount++;
-        }
-      });
-
-      if (tierCount === 0 && usage.providerCost && usage.providerCost.limit > 0) {
-        let p = (usage.providerCost.used / usage.providerCost.limit) * 100;
-        totalPercent += displayMode === "remaining" ? 100 - p : p;
-        tierCount++;
-      }
-    }
-
-    let activePercent = tierCount > 0 ? totalPercent / tierCount : 0;
 
     // Create tab buttons
     // Crear botones de pestaña
@@ -639,33 +628,7 @@ export default class CodexBarExtension extends Extension {
       this._tabsContainer.add_child(btn);
     });
 
-    // Apply fill to panel icon based on ACTIVE provider
-    // Aplicar relleno al icono del panel basado en el proveedor ACTIVO
-    if (this._iconFill) {
-      // Interior width of the box (15px - 2*1px border - 2*1px padding = 11px)
-      const totalFillWidth = 11;
-      const fillWidth = Math.max(
-        1,
-        Math.min(
-          totalFillWidth,
-          Math.round((activePercent / 100) * totalFillWidth),
-        ),
-      );
-
-      let color = "#3584e4"; // Adwaita Blue
-      if (displayMode === "remaining") {
-        if (activePercent < 10) color = "#e01b24";
-        else if (activePercent < 25) color = "#ff7800";
-        else if (activePercent < 50) color = "#f6d32d";
-      } else {
-        if (activePercent > 90) color = "#e01b24";
-        else if (activePercent > 75) color = "#ff7800";
-        else if (activePercent > 50) color = "#f6d32d";
-      }
-
-      this._iconFill.set_width(fillWidth);
-      this._iconFill.set_style(`background-color: ${color};`);
-    }
+    this._updatePanel(displayMode);
 
     if (this._providers.length === 0) {
       this._contentBox.add_child(
@@ -1043,6 +1006,237 @@ export default class CodexBarExtension extends Extension {
     });
 
     this._contentBox.add_child(detailsBox);
+  }
+
+  /**
+   * Build one panel metric: a percentage label with a thin bar under it.
+   *
+   * The bar's track stretches to the label's width, so the bar is only as wide
+   * as the text above it. Since that width is only known at allocation time,
+   * the fill is resized whenever the track's width changes.
+   *
+   * @returns {{box: St.BoxLayout, label: St.Label, track: St.BoxLayout, fill: St.Widget, percent: number}}
+   */
+  _buildPanelMetric() {
+    const box = new St.BoxLayout({
+      vertical: true,
+      y_align: Clutter.ActorAlign.CENTER,
+      style_class: "codexbar-panel-metric",
+    });
+    const label = new St.Label({ style_class: "codexbar-panel-label" });
+    const track = new St.BoxLayout({
+      style_class: "codexbar-panel-track",
+      x_expand: true,
+    });
+    const fill = new St.Widget({
+      style_class: "codexbar-panel-track-fill",
+      x_expand: false,
+      width: 0,
+    });
+    track.add_child(fill);
+    box.add_child(label);
+    box.add_child(track);
+
+    const metric = { box, label, track, fill, percent: 0 };
+    // On allocation, not notify::width: re-showing a hidden group reallocates
+    // to the same width, so a width notify never fires and a fill sized against
+    // the stale width would stick.
+    track.connect("notify::allocation", () => this._applyMetricFill(metric));
+    return metric;
+  }
+
+  /**
+   * Size a metric's fill to its track's current width.
+   * @param {object} metric
+   */
+  _applyMetricFill(metric) {
+    if (!metric || !metric.track || !metric.fill) return;
+    const trackWidth = metric.track.get_width();
+    if (trackWidth <= 0) return;
+    // Keep a sliver visible above 0% so a barely-used window still reads.
+    const target =
+      metric.percent > 0
+        ? Math.max(1, Math.round((metric.percent / 100) * trackWidth))
+        : 0;
+    // Only assign on a real change: this runs from an allocation notify, and
+    // an unconditional set_width would relayout forever.
+    if (metric.fill.get_width() !== target) metric.fill.set_width(target);
+  }
+
+  /**
+   * Short label for a usage window, e.g. 18000 -> "5h", 604800 -> "7d".
+   * @param {number} windowSeconds
+   * @returns {string|null}
+   */
+  _windowShortLabel(windowSeconds) {
+    if (!windowSeconds || windowSeconds <= 0) return null;
+    const hours = Math.round(windowSeconds / 3600);
+    if (hours < 24) return `${hours}h`;
+    return `${Math.round(hours / 24)}d`;
+  }
+
+  /**
+   * The usage windows a provider contributes to the panel.
+   *
+   * Only the two canonical windows are considered; anything further stays in
+   * the popup, where there is room to name it.
+   *
+   * When `limit` is 1, the shortest window wins. It is the one that stops you
+   * mid-task, and keeping the field on a fixed window means a glance doesn't
+   * have to re-read which one it is. Ranking the windows by percentage instead
+   * would compare quantities that aren't comparable - 28% of a week and 3% of
+   * five hours don't measure the same thing.
+   *
+   * The exception is a longer window at or past PANEL_ESCALATE_USED_PERCENT,
+   * which is close enough to exhaustion to be worth interrupting for.
+   *
+   * @param {object} providerData Entry from _providersData.
+   * @param {string} displayMode "used" or "remaining".
+   * @param {number} limit Maximum windows to return.
+   * @returns {Array<{label: string, percent: number}>}
+   */
+  _panelWindows(providerData, displayMode, limit) {
+    const usage = providerData?.data?.usage;
+    const windows = [];
+
+    ["primary", "secondary"].forEach((tier) => {
+      const win = usage?.[tier];
+      if (!win || win.usedPercent === undefined) return;
+      const label = this._windowShortLabel(win.windowSeconds);
+      if (!label) return;
+      const used = this._normalizePercent(win.usedPercent);
+      windows.push({
+        label,
+        used,
+        windowSeconds: win.windowSeconds,
+        percent: displayMode === "remaining" ? 100 - used : used,
+      });
+    });
+
+    if (windows.length <= limit) return windows;
+
+    windows.sort((a, b) => a.windowSeconds - b.windowSeconds);
+    const escalated = windows
+      .slice(limit)
+      .filter((w) => w.used >= PANEL_ESCALATE_USED_PERCENT)
+      .sort((a, b) => b.used - a.used);
+
+    return escalated.length > 0
+      ? escalated.slice(0, limit)
+      : windows.slice(0, limit);
+  }
+
+  /**
+   * Grow the panel group pool to `count` and hide the rest.
+   *
+   * Groups are reused across refreshes so a refresh never rebuilds actors;
+   * only a change in provider count allocates.
+   *
+   * @param {number} count
+   */
+  _ensurePanelGroups(count) {
+    while (this._panelGroups.length < count) {
+      const box = new St.BoxLayout({
+        vertical: false,
+        y_align: Clutter.ActorAlign.CENTER,
+        style_class: "codexbar-panel-group",
+      });
+      const logoBin = new St.Bin({
+        y_align: Clutter.ActorAlign.CENTER,
+        style_class: "codexbar-panel-logo",
+      });
+      const metrics = [this._buildPanelMetric(), this._buildPanelMetric()];
+      box.add_child(logoBin);
+      metrics.forEach((m) => box.add_child(m.box));
+
+      this._panelGroups.push({ box, logoBin, metrics });
+      this._panelBox.add_child(box);
+    }
+  }
+
+  /**
+   * Populate one panel group with a provider's logo and windows.
+   * @param {number} index Group index.
+   * @param {{provider: object, windows: Array}} entry
+   */
+  _fillPanelGroup(index, entry) {
+    const group = this._panelGroups[index];
+    if (!group) return;
+
+    const showLogo = this._settings.get_boolean("panel-show-logo");
+    setVisible(group.box, true);
+
+    // Only swap the icon when the provider actually changed: rebuilding it
+    // every refresh reallocates the row for no reason.
+    const logoId =
+      showLogo && entry.provider
+        ? entry.provider.id || entry.provider.name.toLowerCase()
+        : null;
+    if (group.logoId !== logoId) {
+      group.logoId = logoId;
+      group.logoBin.set_child(null);
+      const logo = logoId ? this._getProviderLogo(logoId) : null;
+      if (logo) group.logoBin.set_child(logo);
+      setVisible(group.logoBin, !!logo);
+    }
+
+    group.metrics.forEach((metric, i) => {
+      const win = entry.windows[i];
+      setVisible(metric.box, !!win);
+      if (!win) return;
+      const text = `${win.label} ${Math.round(win.percent)}%`;
+      if (metric.label.get_text() !== text) metric.label.set_text(text);
+      metric.percent = win.percent;
+      this._applyMetricFill(metric);
+    });
+
+    // A provider with no usable windows still shows its logo, so a failed
+    // fetch reads as "no data" rather than the provider silently vanishing.
+    if (entry.windows.length === 0) {
+      const metric = group.metrics[0];
+      setVisible(metric.box, true);
+      if (metric.label.get_text() !== "—") metric.label.set_text("—");
+      metric.percent = 0;
+      this._applyMetricFill(metric);
+    }
+  }
+
+  /**
+   * Update the panel indicator: each provider's logo and window percentages.
+   *
+   * Each usage window is shown separately rather than averaged - an exhausted
+   * 5h window shouldn't be hidden behind a healthy weekly one.
+   *
+   * @param {string} displayMode "used" or "remaining".
+   */
+  _updatePanel(displayMode) {
+    const showAll =
+      this._settings.get_string("panel-providers") === "all" &&
+      this._providers.length > 1;
+
+    // Active provider only: both windows. All providers: each collapsed to
+    // its most-constrained window, so breadth costs one field per provider.
+    const entries = showAll
+      ? this._providers.map((provider, i) => ({
+          provider,
+          windows: this._panelWindows(this._providersData[i], displayMode, 1),
+        }))
+      : [
+          {
+            provider: this._providers[this._activeProviderIndex],
+            windows: this._panelWindows(
+              this._providersData[this._activeProviderIndex],
+              displayMode,
+              2,
+            ),
+          },
+        ];
+
+    this._ensurePanelGroups(entries.length);
+    this._panelGroups.forEach((group, i) => {
+      if (i < entries.length) this._fillPanelGroup(i, entries[i]);
+      else setVisible(group.box, false);
+    });
   }
 
   /**

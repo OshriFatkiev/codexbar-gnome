@@ -444,6 +444,38 @@ const CodexBarPrefsPage = GObject.registerClass(
       });
       group.add(displayModeRow);
 
+      const panelProvidersRow = new Adw.ComboRow({
+        title: _("Providers in Panel"),
+        subtitle: _(
+          "All providers shows each one collapsed to its most constrained window",
+        ),
+        model: new Gtk.StringList({
+          strings: [_("Selected provider"), _("All providers")],
+        }),
+        selected:
+          this._settings.get_string("panel-providers") === "all" ? 1 : 0,
+      });
+      panelProvidersRow.connect("notify::selected", () => {
+        this._settings.set_string(
+          "panel-providers",
+          panelProvidersRow.selected === 1 ? "all" : "active",
+        );
+      });
+      group.add(panelProvidersRow);
+
+      const panelLogoRow = new Adw.SwitchRow({
+        title: _("Show Provider Logo in Panel"),
+        subtitle: _("Display the active provider's logo next to the indicator"),
+        active: this._settings.get_boolean("panel-show-logo"),
+      });
+      this._settings.bind(
+        "panel-show-logo",
+        panelLogoRow,
+        "active",
+        Gio.SettingsBindFlags.DEFAULT,
+      );
+      group.add(panelLogoRow);
+
       const showLogosRow = new Adw.SwitchRow({
         title: _("Show Provider Logos"),
         subtitle: _(

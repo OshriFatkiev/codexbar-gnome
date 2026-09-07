@@ -78,7 +78,7 @@ const PREDEFINED_PROVIDERS = [
   },
   {
     id: "gemini",
-    name: "Gemini CLI (Code Assist)",
+    name: "Gemini CLI",
     useApi: false,
     defaultCommand: "codexbar --provider gemini --source api --format json",
   },

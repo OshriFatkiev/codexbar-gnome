@@ -95,7 +95,7 @@ history, not known quota; it cannot supply a usage percentage. Explicit OAuth
 uses separate credentials and does not use the signed-in local `agy` service.
 See [CodexBar's Antigravity documentation](https://github.com/steipete/CodexBar/blob/main/docs/antigravity.md).
 
-**Gemini CLI (Code Assist)** remains available for supported accounts, including
+**Gemini CLI** remains available for supported accounts, including
 Code Assist Standard and Enterprise. Google ended Gemini CLI's Google login for
 individual, AI Pro and Ultra accounts on June 18, 2026; those accounts should use
 Antigravity instead. See [Google's deprecation notice](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals).

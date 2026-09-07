@@ -1215,6 +1215,7 @@ export default class CodexBarExtension extends Extension {
    *
    * The exception is a longer window at or past PANEL_ESCALATE_USED_PERCENT,
    * which is close enough to exhaustion to be worth interrupting for.
+   * An exhausted window always wins; if both are exhausted, keep the shorter.
    *
    * @param {object} providerData Entry from _providersData.
    * @param {string} displayMode "used" or "remaining".
@@ -1242,6 +1243,9 @@ export default class CodexBarExtension extends Extension {
     if (windows.length <= limit) return windows;
 
     windows.sort((a, b) => a.windowSeconds - b.windowSeconds);
+    const exhausted = windows.filter((w) => w.used >= 100);
+    if (exhausted.length > 0) return exhausted.slice(0, limit);
+
     const escalated = windows
       .slice(limit)
       .filter((w) => w.used >= PANEL_ESCALATE_USED_PERCENT)

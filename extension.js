@@ -1206,6 +1206,7 @@ export default class CodexBarExtension extends Extension {
    *
    * Only the two canonical windows are considered; anything further stays in
    * the popup, where there is room to name it.
+   * Without time windows, show a credit or cost-budget percentage if available.
    *
    * When `limit` is 1, the shortest window wins. It is the one that stops you
    * mid-task, and keeping the field on a fixed window means a glance doesn't
@@ -1239,6 +1240,25 @@ export default class CodexBarExtension extends Extension {
         percent: displayMode === "remaining" ? 100 - used : used,
       });
     });
+
+    if (windows.length === 0) {
+      let used = deriveCreditsPercent(normalizeDetailSections(usage?.details));
+      let label = _("Credits");
+      const cost = usage?.providerCost;
+      if (used === null && Number.isFinite(cost?.used) &&
+          Number.isFinite(cost?.limit) && cost.limit > 0) {
+        used = this._normalizePercent((cost.used / cost.limit) * 100);
+        label = _("Budget");
+      }
+      if (used !== null) {
+        windows.push({
+          label,
+          used,
+          windowSeconds: 0,
+          percent: displayMode === "remaining" ? 100 - used : used,
+        });
+      }
+    }
 
     if (windows.length <= limit) return windows;
 

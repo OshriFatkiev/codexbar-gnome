@@ -2,6 +2,7 @@ import Gio from "gi://Gio";
 import GioUnix from "gi://GioUnix";
 import GLib from "gi://GLib";
 import GObject from "gi://GObject";
+import Gdk from "gi://Gdk";
 import Gtk from "gi://Gtk";
 import Adw from "gi://Adw";
 import {
@@ -548,6 +549,53 @@ const CodexBarPrefsPage = GObject.registerClass(
         this._settings.set_string("providers", JSON.stringify(newProviders));
       };
 
+      // Re-added rather than reordered in place: Adw.PreferencesGroup has no
+      // reorder API, so the rows are detached and appended in the new order,
+      // with the "add" row kept last.
+      let addBtnRow = null;
+      const applyRowOrder = () => {
+        this._providerRows.forEach((row) => group.remove(row));
+        if (addBtnRow) group.remove(addBtnRow);
+        this._providerRows.forEach((row) => group.add(row));
+        if (addBtnRow) group.add(addBtnRow);
+        refreshHandles();
+      };
+
+      // Only enabled rows carry an order, since saveProviders writes just
+      // those; a disabled row has no place in the sequence and cannot be
+      // dragged or dropped onto.
+      const isOrderable = (row) => !!row && row._enabledSwitch.active;
+
+      // The row currently being dragged. Held here rather than passed through
+      // the drag content, which only needs to carry something GTK can type.
+      let draggedRow = null;
+
+      const refreshHandles = () => {
+        const orderable = this._providerRows.filter(isOrderable);
+        this._providerRows.forEach((row) => {
+          if (row._dragHandle) {
+            row._dragHandle.visible = isOrderable(row) && orderable.length > 1;
+          }
+        });
+      };
+
+      const dropRowOnto = (target) => {
+        const source = draggedRow;
+        draggedRow = null;
+        if (!source || source === target) return false;
+        if (!isOrderable(source) || !isOrderable(target)) return false;
+
+        const from = this._providerRows.indexOf(source);
+        const to = this._providerRows.indexOf(target);
+        if (from === -1 || to === -1) return false;
+
+        this._providerRows.splice(from, 1);
+        this._providerRows.splice(to, 0, source);
+        applyRowOrder();
+        saveProviders();
+        return true;
+      };
+
       const createProviderRow = (info, activeData = null) => {
         const isEnabled = activeData !== null;
         const isPredefined = PREDEFINED_PROVIDERS.some((p) => p.id === info.id);
@@ -610,10 +658,49 @@ const CodexBarPrefsPage = GObject.registerClass(
         enabledSwitch.connect("notify::active", () => {
           row.set_subtitle(enabledSwitch.active ? _("Enabled") : _("Disabled"));
           row.expanded = enabledSwitch.active;
+          refreshHandles();
           saveProviders();
         });
         row.add_suffix(enabledSwitch);
         row._enabledSwitch = enabledSwitch;
+
+        // Drag to reorder. PreferencesGroup has no reorder API, so the drop
+        // rearranges this._providerRows and applyRowOrder re-adds every row.
+        const dragHandle = new Gtk.Image({
+          icon_name: "list-drag-handle-symbolic",
+          valign: Gtk.Align.CENTER,
+          css_classes: ["dim-label"],
+          tooltip_text: _("Drag to reorder the tabs and the panel"),
+        });
+
+        const dragSource = new Gtk.DragSource({
+          actions: Gdk.DragAction.MOVE,
+        });
+        dragSource.connect("prepare", () => {
+          if (!isOrderable(row)) return null;
+          draggedRow = row;
+          return Gdk.ContentProvider.new_for_value(row._id);
+        });
+        dragSource.connect("drag-begin", (source) => {
+          // Collapsed first: these rows expand to a command entry and buttons,
+          // and dragging that whole box around is unreadable.
+          row.expanded = false;
+          source.set_icon(Gtk.WidgetPaintable.new(row), 0, 0);
+        });
+        dragSource.connect("drag-end", () => {
+          draggedRow = null;
+        });
+        dragHandle.add_controller(dragSource);
+
+        const dropTarget = new Gtk.DropTarget({
+          actions: Gdk.DragAction.MOVE,
+          formats: Gdk.ContentFormats.new_for_gtype(GObject.TYPE_STRING),
+        });
+        dropTarget.connect("drop", () => dropRowOnto(row));
+        row.add_controller(dropTarget);
+
+        row.add_prefix(dragHandle);
+        row._dragHandle = dragHandle;
 
         const box = new Gtk.Box({
           orientation: Gtk.Orientation.VERTICAL,
@@ -825,6 +912,7 @@ const CodexBarPrefsPage = GObject.registerClass(
           deleteBtn.connect("clicked", () => {
             group.remove(row);
             this._providerRows = this._providerRows.filter((r) => r !== row);
+            refreshHandles();
             saveProviders();
           });
           box.append(deleteBtn);
@@ -835,43 +923,51 @@ const CodexBarPrefsPage = GObject.registerClass(
         return row;
       };
 
-      const processedIds = new Set();
-      const processedNames = new Set();
+      // Configured providers render in the order they are stored in, which is
+      // also the order of the popup tabs and of the panel in all-providers
+      // mode. Rendering by PREDEFINED_PROVIDERS instead discarded that order on
+      // every open, even though saveProviders had written it out faithfully.
+      // Predefined providers that aren't configured follow, so they can still
+      // be switched on.
+      const claimedIds = new Set();
+      const claimedNames = new Set();
 
-      // 1. Predefined Providers
-      PREDEFINED_PROVIDERS.forEach((info) => {
-        const infoNameLower = info.name.toLowerCase();
-        const activeData =
-          activeProviders.find((p) => p.id === info.id) ||
-          activeProviders.find((p) => p.name.toLowerCase() === infoNameLower);
-
-        if (activeData) {
-          processedIds.add(activeData.id);
-          processedNames.add(activeData.name.toLowerCase());
-        }
-        group.add(createProviderRow(info, activeData));
-      });
-
-      // 2. Custom Providers
-      activeProviders.forEach((p) => {
-        const pNameLower = p.name.toLowerCase();
-        if (!processedIds.has(p.id) && !processedNames.has(pNameLower)) {
-          group.add(
-            createProviderRow(
-              {
-                id: p.id,
-                name: p.name,
-                useApi: p.useApi || false,
-                defaultCommand: p.command,
-              },
-              p,
-            ),
+      const rows = activeProviders.map((provider) => {
+        const nameLower = (provider.name || "").toLowerCase();
+        const predefined =
+          PREDEFINED_PROVIDERS.find((info) => info.id === provider.id) ||
+          PREDEFINED_PROVIDERS.find(
+            (info) => info.name.toLowerCase() === nameLower,
           );
+
+        claimedIds.add(provider.id);
+        claimedNames.add(nameLower);
+        if (predefined) {
+          claimedIds.add(predefined.id);
+          claimedNames.add(predefined.name.toLowerCase());
         }
+
+        return {
+          info: predefined || {
+            id: provider.id,
+            name: provider.name,
+            useApi: provider.useApi || false,
+            defaultCommand: provider.command,
+          },
+          activeData: provider,
+        };
       });
+
+      PREDEFINED_PROVIDERS.forEach((info) => {
+        if (claimedIds.has(info.id)) return;
+        if (claimedNames.has(info.name.toLowerCase())) return;
+        rows.push({ info, activeData: null });
+      });
+
+      rows.forEach((row) => group.add(createProviderRow(row.info, row.activeData)));
 
       // 3. Add Custom Provider Button
-      const addBtnRow = new Adw.ActionRow({
+      addBtnRow = new Adw.ActionRow({
         title: _("Add Custom Provider"),
         subtitle: _("The extension should parse it correctly."),
       });
@@ -930,12 +1026,11 @@ const CodexBarPrefsPage = GObject.registerClass(
                 },
                 newProvider,
               );
-              // Add before the "Add Custom Provider" button
-              // Añadir antes del botón "Añadir Proveedor Personalizado"
+              // PreferencesGroup only appends, so the new row would land below
+              // the "add" button; reapplying the order puts that button back
+              // at the bottom where it belongs.
               group.add(row);
-              // Manually move it up if needed, but Adw.PreferencesGroup appends
-              // In GNOME 45+ we can't easily reorder children in PreferencesGroup
-              // without removing the button and re-adding it.
+              applyRowOrder();
               saveProviders();
             }
           }
@@ -945,6 +1040,9 @@ const CodexBarPrefsPage = GObject.registerClass(
 
       addBtnRow.add_suffix(addBtn);
       group.add(addBtnRow);
+
+      // Every row exists by now, so a lone provider correctly gets no handle.
+      refreshHandles();
 
       return group;
     }

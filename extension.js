@@ -112,6 +112,20 @@ export default class CodexBarExtension extends Extension {
     });
     this._panelBox.add_child(this._panelMeasureLabel);
 
+    // Shown until there is a provider to report on. Without it the button has
+    // no contents on first run or with nothing configured, leaving nothing to
+    // click - and the welcome screen that explains what to do next is behind
+    // that click.
+    this._panelFallbackIcon = new St.Icon({
+      // In hicolor, so it resolves under any icon theme; the Adwaita set has
+      // no system-monitor symbolic and Yaru-only names fall back to nothing.
+      icon_name: "speedometer-symbolic",
+      icon_size: 16,
+      y_align: Clutter.ActorAlign.CENTER,
+      style_class: "codexbar-panel-fallback",
+    });
+    this._panelBox.add_child(this._panelFallbackIcon);
+
     this._indicator.add_child(this._panelBox);
 
     // Header section of the popup menu
@@ -249,6 +263,7 @@ export default class CodexBarExtension extends Extension {
       this._panelGroups = null;
     }
     this._panelMeasureLabel = null;
+    this._panelFallbackIcon = null;
     if (this._panelBox) {
       this._panelBox.destroy();
       this._panelBox = null;
@@ -1302,6 +1317,10 @@ export default class CodexBarExtension extends Extension {
    * @param {string} displayMode "used" or "remaining".
    */
   _updatePanel(displayMode) {
+    // _updateUI can be reached with nothing configured, via a settings watcher
+    // rather than a refresh.
+    setVisible(this._panelFallbackIcon, this._providers.length === 0);
+
     const showAll =
       this._settings.get_string("panel-providers") === "all" &&
       this._providers.length > 1;

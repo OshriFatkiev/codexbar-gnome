@@ -144,6 +144,12 @@
     spacing: 4px;
 }
 
+/* Shown only when no provider is configured. */
+.codexbar-panel-fallback {
+    icon-size: 16px;
+    -st-icon-style: symbolic;
+}
+
 .codexbar-panel-logo {
     icon-size: 16px;
     -st-icon-style: symbolic;

@@ -1435,6 +1435,43 @@ export default class CodexBarExtension extends Extension {
    * Helper to create a command box with a Copy button.
    * Crea un contenedor con el comando y un botón para copiar al portapapeles.
    */
+  /**
+   * How to install the codexbar CLI on this machine.
+   *
+   * The instruction used to be the Homebrew command unconditionally, which
+   * fails on a distro without Homebrew - the common case on Linux. Pick by
+   * what is actually present, the way the Antigravity row picks its lsof
+   * command.
+   *
+   * @returns {{command: string, note: string|null}}
+   */
+  _codexbarInstallHint() {
+    if (GLib.find_program_in_path("brew")) {
+      return { command: "brew install steipete/tap/codexbar", note: null };
+    }
+    for (const helper of ["yay", "paru"]) {
+      if (GLib.find_program_in_path(helper)) {
+        return { command: `${helper} -S codexbar-cli`, note: null };
+      }
+    }
+
+    // No package manager we can drive: send them to the releases page. The
+    // asset name carries the version, so there is no stable download URL to
+    // hand them instead.
+    const arch = GLib.file_test(
+      "/lib/ld-linux-aarch64.so.1",
+      GLib.FileTest.EXISTS,
+    )
+      ? "aarch64"
+      : "x86_64";
+    return {
+      command: "https://github.com/steipete/CodexBar/releases",
+      note: _(
+        "Download CodexBarCLI-<version>-linux-%s.tar.gz and put codexbar on your PATH (~/.local/bin works).",
+      ).format(arch),
+    };
+  }
+
   _createCommandWithCopyButton(commandText) {
     let box = new St.BoxLayout({
       vertical: false,
@@ -1540,9 +1577,16 @@ export default class CodexBarExtension extends Extension {
     );
 
     if (!codexbarExists) {
-      dep1Box.add_child(
-        this._createCommandWithCopyButton("brew install steipete/tap/codexbar"),
-      );
+      const hint = this._codexbarInstallHint();
+      dep1Box.add_child(this._createCommandWithCopyButton(hint.command));
+      if (hint.note) {
+        const noteLabel = new St.Label({
+          text: hint.note,
+          style: "font-size: 0.8em; color: #b5b5b5; margin-top: 4px;",
+        });
+        noteLabel.clutter_text.line_wrap = true;
+        dep1Box.add_child(noteLabel);
+      }
     }
     box.add_child(dep1Box);
 

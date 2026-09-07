@@ -149,6 +149,15 @@ export default class CodexBarExtension extends Extension {
     });
     this._indicator.menu.box.add_child(this._contentBox);
 
+    // Sibling of the content box rather than a child of it, so its separator
+    // spans the popup and it sits flush at the bottom edge.
+    this._footerBox = new St.BoxLayout({
+      vertical: false,
+      x_expand: true,
+      style_class: "codexbar-footer",
+    });
+    this._indicator.menu.box.add_child(this._footerBox);
+
     Main.panel.addToStatusArea(this.uuid, this._indicator);
 
     this._activeProviderIndex = 0;
@@ -238,6 +247,10 @@ export default class CodexBarExtension extends Extension {
     if (this._contentBox) {
       this._contentBox.destroy();
       this._contentBox = null;
+    }
+    if (this._footerBox) {
+      this._footerBox.destroy();
+      this._footerBox = null;
     }
     if (this._indicator) {
       this._indicator.destroy();
@@ -562,6 +575,10 @@ export default class CodexBarExtension extends Extension {
 
     this._tabsContainer.destroy_all_children();
     this._contentBox.destroy_all_children();
+    this._footerBox.destroy_all_children();
+    // Shown again only when there is a timestamp to put in it, so the
+    // separator never appears above an empty strip.
+    setVisible(this._footerBox, false);
 
     const displayMode = this._settings.get_string("display-mode");
     const firstRun = this._settings.get_boolean("first-run");
@@ -725,16 +742,6 @@ export default class CodexBarExtension extends Extension {
       }
       accountBox.add_child(accountDetails);
 
-      if (usage.updatedAt) {
-        let date = new Date(usage.updatedAt);
-        let dateStr = date.toLocaleTimeString([], {
-          hour: "2-digit",
-          minute: "2-digit",
-        });
-        accountBox.add_child(
-          subtitleLabel({ text: _("Updated %s").format(dateStr) }),
-        );
-      }
       this._contentBox.add_child(accountBox);
     }
 
@@ -934,6 +941,33 @@ export default class CodexBarExtension extends Extension {
 
       this._contentBox.add_child(costBox);
     }
+
+    this._renderUpdatedAt(usage);
+  }
+
+  /**
+   * Render the fetch timestamp as a footer.
+   *
+   * It describes when this tab's data was fetched rather than the account
+   * above it, so it belongs after the usage rather than in the identity block
+   * where it used to sit.
+   *
+   * @param {object} usage
+   */
+  _renderUpdatedAt(usage) {
+    if (!usage?.updatedAt) return;
+
+    const date = new Date(usage.updatedAt);
+    if (Number.isNaN(date.getTime())) return;
+
+    this._footerBox.add_child(
+      subtitleLabel({
+        text: _("Updated %s").format(
+          date.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" }),
+        ),
+      }),
+    );
+    setVisible(this._footerBox, true);
   }
 
   /**

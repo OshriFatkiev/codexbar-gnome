@@ -165,9 +165,11 @@
     font-feature-settings: "tnum";
 }
 
-/* Track stretches to the label width above it; the fill is sized in JS. */
+/* Width is set in JS to the widest visible label, shared across every track so
+   the bars stay comparable; the value here only covers the first frame. */
 .codexbar-panel-track {
     height: 2px;
+    width: 40px;
     background-color: rgba(127, 127, 127, 0.35);
     border-radius: 1px;
 }

@@ -48,6 +48,17 @@ const SECONDARY_TEXT_OPACITY = 200;
 // close enough to exhaustion to be worth taking the slot.
 const PANEL_ESCALATE_USED_PERCENT = 95;
 
+// Floor for the usage bars, so a short label like "5h 0%" still leaves a bar
+// long enough to read a proportion off.
+const PANEL_TRACK_MIN_WIDTH = 32;
+
+// The bars are sized to this string rather than to whatever is on screen, so
+// their length stays put as values change and one bar can be compared with
+// another. Measured, not hardcoded in pixels, so it follows the font size.
+// A longer label (a monthly window, say) still widens the bars rather than
+// overhanging them - see _syncTrackWidths.
+const PANEL_WIDEST_LABEL = "7d 100%";
+
 /**
  * Build a dimmed secondary label.
  * @param {object} params Extra St.Label properties.
@@ -91,6 +102,15 @@ export default class CodexBarExtension extends Extension {
     // (a percentage with a thin bar beneath it). Groups are allocated lazily in
     // _ensurePanelGroups and reused, so a refresh never rebuilds actors.
     this._panelGroups = [];
+
+    // Never shown: exists only so the bars can be sized to the widest label
+    // that can occur rather than the widest currently on screen.
+    this._panelMeasureLabel = new St.Label({
+      style_class: "codexbar-panel-label",
+      text: PANEL_WIDEST_LABEL,
+      visible: false,
+    });
+    this._panelBox.add_child(this._panelMeasureLabel);
 
     this._indicator.add_child(this._panelBox);
 
@@ -228,6 +248,7 @@ export default class CodexBarExtension extends Extension {
       this._panelGroups.forEach((g) => g.box.destroy());
       this._panelGroups = null;
     }
+    this._panelMeasureLabel = null;
     if (this._panelBox) {
       this._panelBox.destroy();
       this._panelBox = null;
@@ -1045,9 +1066,9 @@ export default class CodexBarExtension extends Extension {
   /**
    * Build one panel metric: a percentage label with a thin bar under it.
    *
-   * The bar's track stretches to the label's width, so the bar is only as wide
-   * as the text above it. Since that width is only known at allocation time,
-   * the fill is resized whenever the track's width changes.
+   * The track has a fixed width from the stylesheet so every bar shares a 100%
+   * reference. That width still isn't known until allocation, so the fill is
+   * resized from the allocation notify rather than at construction.
    *
    * @returns {{box: St.BoxLayout, label: St.Label, track: St.BoxLayout, fill: St.Widget, percent: number}}
    */
@@ -1060,7 +1081,10 @@ export default class CodexBarExtension extends Extension {
     const label = new St.Label({ style_class: "codexbar-panel-label" });
     const track = new St.BoxLayout({
       style_class: "codexbar-panel-track",
-      x_expand: true,
+      // Not x_expand: the track takes its fixed width from the stylesheet so
+      // every bar means the same thing, rather than stretching to its label.
+      x_expand: false,
+      x_align: Clutter.ActorAlign.START,
     });
     const fill = new St.Widget({
       style_class: "codexbar-panel-track-fill",
@@ -1304,6 +1328,49 @@ export default class CodexBarExtension extends Extension {
     this._panelGroups.forEach((group, i) => {
       if (i < entries.length) this._fillPanelGroup(i, entries[i]);
       else setVisible(group.box, false);
+    });
+    this._syncTrackWidths();
+  }
+
+  /**
+   * Give every visible track the width of the widest visible label.
+   *
+   * The width comes from PANEL_WIDEST_LABEL rather than the labels currently
+   * shown, so it is comparable between bars, never overhung by its text, and
+   * stable as values change. A label wider than that baseline still wins, so
+   * an unexpected window length widens the bars instead of spilling over.
+   */
+  _syncTrackWidths() {
+    if (!this._panelGroups) return;
+
+
+    const tracks = [];
+    // Baseline is the worst-case label, so the width does not move as values
+    // change; a longer label than expected still wins, to avoid overhang.
+    let widest = 0;
+    if (this._panelMeasureLabel) {
+      // Force style resolution first: an actor that has never been mapped can
+      // otherwise report a width computed at the default font rather than the
+      // 0.9em the stylesheet gives it, making every bar wider than its text.
+      this._panelMeasureLabel.ensure_style();
+      widest = this._panelMeasureLabel.get_preferred_width(-1)[1];
+    }
+    this._panelGroups.forEach((group) => {
+      if (!group.box.visible) return;
+      group.metrics.forEach((metric) => {
+        if (!metric.box.visible) return;
+        // Preferred width, not allocated: this runs before layout, and asking
+        // for the allocation here would size against the previous text.
+        const [, natural] = metric.label.get_preferred_width(-1);
+        widest = Math.max(widest, natural);
+        tracks.push(metric.track);
+      });
+    });
+
+    if (widest <= 0) return;
+    const width = Math.round(Math.max(PANEL_TRACK_MIN_WIDTH, widest));
+    tracks.forEach((track) => {
+      if (track.get_width() !== width) track.set_width(width);
     });
   }
 

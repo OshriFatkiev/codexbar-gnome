@@ -172,8 +172,10 @@
     border-radius: 1px;
 }
 
+/* Fallback only: the real colour is read from the theme and applied inline,
+   so this shows for the instant before the label has a theme node. */
 .codexbar-panel-track-fill {
     height: 2px;
-    background-color: rgba(255, 255, 255, 0.85);
+    background-color: rgba(127, 127, 127, 0.85);
     border-radius: 1px;
 }

@@ -1042,11 +1042,21 @@ export default class CodexBarExtension extends Extension {
     // to the same width, so a width notify never fires and a fill sized against
     // the stale width would stick.
     track.connect("notify::allocation", () => this._applyMetricFill(metric));
+    // Recolour when the shell theme changes (light/dark switch), which need not
+    // move the allocation.
+    label.connect("style-changed", () => this._applyMetricFill(metric));
     return metric;
   }
 
   /**
-   * Size a metric's fill to its track's current width.
+   * Size a metric's fill to its track's current width, and colour it to match
+   * the panel's own text.
+   *
+   * The colour is read from the label's resolved theme node rather than set in
+   * the stylesheet: St has no way to inherit a colour into a background, and
+   * the accent-colour setting only exists from GNOME 47. Reading the theme node
+   * works on any shell theme, light or dark, with no version check.
+   *
    * @param {object} metric
    */
   _applyMetricFill(metric) {
@@ -1061,6 +1071,30 @@ export default class CodexBarExtension extends Extension {
     // Only assign on a real change: this runs from an allocation notify, and
     // an unconditional set_width would relayout forever.
     if (metric.fill.get_width() !== target) metric.fill.set_width(target);
+
+    const style = this._metricFillStyle(metric);
+    if (style && metric.fillStyle !== style) {
+      metric.fillStyle = style;
+      metric.fill.set_style(style);
+    }
+  }
+
+  /**
+   * Inline style giving the fill the label's foreground colour.
+   * @param {object} metric
+   * @returns {string|null} Null before the label has a resolved theme node.
+   */
+  _metricFillStyle(metric) {
+    let colour = null;
+    try {
+      colour = metric.label.get_theme_node().get_foreground_color();
+    } catch (e) {
+      // Thrown while the actor is unmapped and has no theme node yet; the
+      // allocation notify will bring us back here once it does.
+      return null;
+    }
+    if (!colour) return null;
+    return `background-color: rgba(${colour.red}, ${colour.green}, ${colour.blue}, 0.85);`;
   }
 
   /**

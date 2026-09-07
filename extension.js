@@ -242,6 +242,7 @@ export default class CodexBarExtension extends Extension {
    * Manejar cambios en la configuración.
    */
   _onSettingsChanged() {
+    const activeId = this._providers?.[this._activeProviderIndex]?.id;
     const providersJson = this._settings.get_string("providers");
     try {
       this._providers = JSON.parse(providersJson);
@@ -250,11 +251,15 @@ export default class CodexBarExtension extends Extension {
       console.error(e, "CodexBar: Failed to parse providers");
     }
 
-    if (this._activeProviderIndex >= this._providers.length) {
-      this._activeProviderIndex = 0;
-    }
+    this._activeProviderIndex = Math.max(
+      0, this._providers.findIndex((provider) => provider.id === activeId),
+    );
+    // Results are indexed in the old order. Clear them before any UI update
+    // can pair them with the newly configured providers.
+    this._providersData = [];
 
     this._refreshData();
+    this._updateUI();
     this._setupTimeout();
   }
 
@@ -364,22 +369,33 @@ export default class CodexBarExtension extends Extension {
       return;
     }
 
-    this._providersData = [];
+    // Settings can replace the provider list while a request is awaiting the
+    // keyring or network. Keep this run's inputs and results together, and
+    // publish only if both the configuration and enable cycle still match.
+    const providers = this._providers;
+    const cancellable = this._cancellable;
+    const providersData = [];
+    const isCurrent = () =>
+      this._providers === providers &&
+      this._cancellable === cancellable &&
+      cancellable && !cancellable.is_cancelled();
 
-    for (let i = 0; i < this._providers.length; i++) {
-      const provider = this._providers[i];
+    for (let i = 0; i < providers.length && isCurrent(); i++) {
+      const provider = providers[i];
 
       if (provider.useApi) {
         logDev(`Fetching API summary for provider: ${provider.name}`);
         try {
           let data;
           const token = await loadToken(provider.id);
+          if (!isCurrent()) break;
           if (!token) {
             logDev(`Error: No token found in keyring for provider: ${provider.name}`);
-            this._providersData[i] = { error: _("No token found in keyring") };
+            providersData[i] = { error: _("No token found in keyring") };
             continue;
           }
-          data = await this._apiClient.fetchSummary(token, provider.id, this._cancellable);
+          data = await this._apiClient.fetchSummary(token, provider.id, cancellable);
+          if (!isCurrent()) break;
 
           // Generate dynamic labels based on window durations
           // Generar etiquetas dinámicas basadas en las duraciones de las ventanas
@@ -409,18 +425,19 @@ export default class CodexBarExtension extends Extension {
             );
           }
 
-          this._providersData[i] = {
+          providersData[i] = {
             data: data,
             labels: apiLabels,
           };
           logDev(`Successfully fetched API data for provider: ${provider.name}`);
         } catch (error) {
+          if (!isCurrent()) break;
           logDev(`API error for provider ${provider.name}: ${error.message || error}`);
           console.error(error, `CodexBar: API error for ${provider.name}`);
           let msg = error.message;
           if (!msg && error.toString) msg = error.toString();
           if (!msg || msg === "[object Object]") msg = _("Unknown API error");
-          this._providersData[i] = { error: msg };
+          providersData[i] = { error: msg };
         }
         continue;
       }
@@ -429,7 +446,7 @@ export default class CodexBarExtension extends Extension {
       // Caso 2: El proveedor usa un comando CLI (herramienta codexbar externa)
       if (!provider.command) {
         logDev(`Error: No CLI command configured for provider: ${provider.name}`);
-        this._providersData[i] = { error: _("No command configured") };
+        providersData[i] = { error: _("No command configured") };
         continue;
       }
 
@@ -437,12 +454,9 @@ export default class CodexBarExtension extends Extension {
       try {
         const result = await this._apiClient.fetchCliSummary(
           provider.command,
-          this._cancellable,
+          cancellable,
         );
-        if (!this._cancellable || this._cancellable.is_cancelled()) {
-          logDev(`CLI execution cancelled for provider: ${provider.name}`);
-          return;
-        }
+        if (!isCurrent()) break;
 
         let rawData = result.data;
         let finalLabels = result.labels || [];
@@ -472,13 +486,14 @@ export default class CodexBarExtension extends Extension {
           }
         }
 
-        this._providersData[i] = {
+        providersData[i] = {
           data: rawData,
           labels: finalLabels,
           command: result.command,
         };
         logDev(`Successfully executed CLI command for provider: ${provider.name}`);
       } catch (error) {
+        if (!isCurrent()) break;
         if (this._cancellable && !this._cancellable.is_cancelled()) {
           logDev(`CLI error for provider ${provider.name}: ${error.message || error}`);
           console.error(
@@ -488,7 +503,7 @@ export default class CodexBarExtension extends Extension {
           let msg = error.message;
           if (!msg && error.toString) msg = error.toString();
           if (!msg || msg === "[object Object]") msg = _("Unknown CLI error");
-          this._providersData[i] = {
+          providersData[i] = {
             error: msg,
             command: provider.command,
           };
@@ -496,11 +511,15 @@ export default class CodexBarExtension extends Extension {
       }
     }
 
-    if (this._cancellable && !this._cancellable.is_cancelled()) {
-      this._loading = false;
-      if (this._headerTitle) this._headerTitle.set_text(_("CodexBar"));
-      this._updateUI();
-    }
+    // An old enable cycle must not release a newer cycle's loading guard.
+    if (this._cancellable !== cancellable) return;
+    this._loading = false;
+    if (!cancellable || cancellable.is_cancelled()) return;
+    if (this._headerTitle) this._headerTitle.set_text(_("CodexBar"));
+    if (this._providers !== providers) return this._refreshData();
+
+    this._providersData = providersData;
+    this._updateUI();
   }
 
   /**

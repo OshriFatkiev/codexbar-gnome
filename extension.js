@@ -508,6 +508,10 @@ export default class CodexBarExtension extends Extension {
         );
         if (!this._cancellable || this._cancellable.is_cancelled()) {
           logDev(`CLI execution cancelled for provider: ${provider.name}`);
+          // Clear the guard on the way out: leaving it set would make every
+          // later _refreshData return at the top, silently freezing both the
+          // data and the UI until the extension is re-enabled.
+          this._loading = false;
           return;
         }
 
@@ -563,8 +567,10 @@ export default class CodexBarExtension extends Extension {
       }
     }
 
+    // Released unconditionally: only the UI refresh is worth skipping when the
+    // run was cancelled, and holding the guard would freeze every later run.
+    this._loading = false;
     if (this._cancellable && !this._cancellable.is_cancelled()) {
-      this._loading = false;
       if (this._headerTitle) this._headerTitle.set_text(_("CodexBar"));
       this._updateUI();
     }

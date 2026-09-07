@@ -18,9 +18,9 @@ import {
 import {
   adoptCustomProviders,
   buildCliCommand,
-  CLI_SOURCES,
   DIRECT_API,
   parseGeneratedCommand,
+  providerSourceSelection,
 } from "./providerSources.js";
 
 /**
@@ -74,11 +74,11 @@ const PREDEFINED_PROVIDERS = [
     name: "Antigravity",
     useApi: false,
     defaultCommand:
-      "codexbar --provider antigravity --source cli --format json",
+      "codexbar --provider antigravity --source auto --format json",
   },
   {
     id: "gemini",
-    name: "Gemini CLI",
+    name: "Gemini CLI (Code Assist)",
     useApi: false,
     defaultCommand: "codexbar --provider gemini --source api --format json",
   },
@@ -662,10 +662,6 @@ const CodexBarPrefsPage = GObject.registerClass(
         // whatever the user typed, so claiming a source for it would be a
         // guess. Saved configs predate `source`, so fall back to reading it
         // off the stored command (or the Direct API flag) before the default.
-        const sourceOptions = (
-          info.supportsDirectApi ? [DIRECT_API] : []
-        ).concat(CLI_SOURCES);
-
         const storedSource =
           activeData?.source ||
           (activeData?.useApi ? DIRECT_API : null) ||
@@ -673,11 +669,11 @@ const CodexBarPrefsPage = GObject.registerClass(
           (info.useApi ? DIRECT_API : null) ||
           parseGeneratedCommand(info.defaultCommand)?.source ||
           "cli";
+        const selection = providerSourceSelection(info, storedSource);
+        const sourceOptions = selection.options;
 
         if (isPredefined) {
-          row._source = sourceOptions.includes(storedSource)
-            ? storedSource
-            : sourceOptions[0];
+          row._source = selection.source;
         } else {
           row._source = null;
         }
@@ -771,7 +767,11 @@ const CodexBarPrefsPage = GObject.registerClass(
           );
 
           const sourceDropdown = new Gtk.DropDown({
-            model: Gtk.StringList.new(sourceOptions.map(sourceLabel)),
+            model: Gtk.StringList.new(sourceOptions.map((source) =>
+              source === selection.unsupportedSource
+                ? `${sourceLabel(source)} (${_("unsupported for this provider")})`
+                : sourceLabel(source),
+            )),
             selected: sourceOptions.indexOf(row._source),
             valign: Gtk.Align.CENTER,
             hexpand: true,
@@ -785,6 +785,17 @@ const CodexBarPrefsPage = GObject.registerClass(
 
           sourceRow.append(sourceDropdown);
           box.append(sourceRow);
+
+          if (info.id === "gemini" || info.id === "antigravity") {
+            box.append(new Gtk.Label({
+              label: info.id === "gemini"
+                ? _("For supported Gemini Code Assist accounts, including Standard and Enterprise. Personal, Google AI Pro and Ultra accounts should use Antigravity with Auto instead. Auto and Provider API read Gemini CLI's Google login; the separate OAuth source is not supported.")
+                : _("For Gemini usage in Antigravity, choose Auto. Run agy once and complete sign-in. CodexBar can then launch agy to read your limits. OAuth uses a separate login and may provide fewer quota details. If limits are unavailable, open agy and refresh."),
+              xalign: 0,
+              wrap: true,
+              css_classes: ["dim-label"],
+            }));
+          }
         }
 
         const apiBox = new Gtk.Box({

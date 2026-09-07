@@ -10,6 +10,28 @@
 export const DIRECT_API = "direct-api";
 export const CLI_SOURCES = ["auto", "web", "cli", "oauth", "api"];
 
+// CodexBar's provider descriptors define these subsets of the global flag.
+// Gemini's API source uses OAuth credentials internally; --source oauth is
+// nevertheless unsupported. Keep the global list for other providers until
+// their source contracts have been verified individually.
+const PROVIDER_CLI_SOURCES = {
+  gemini: ["auto", "api"],
+  antigravity: ["auto", "cli", "oauth"],
+};
+
+/**
+ * Build a provider's dropdown without silently changing saved connections.
+ * A previously saved unsupported source stays visible, marked for correction.
+ */
+export function providerSourceSelection(provider, storedSource) {
+  const options = (provider.supportsDirectApi ? [DIRECT_API] : [])
+    .concat(PROVIDER_CLI_SOURCES[provider.id] || CLI_SOURCES);
+  const unsupportedSource = storedSource && !options.includes(storedSource)
+    ? storedSource : null;
+  if (unsupportedSource) options.push(unsupportedSource);
+  return { options, source: storedSource || options[0], unsupportedSource };
+}
+
 /**
  * Build the codexbar-cli invocation for a provider and source.
  * @param {string} cliId Provider id as codexbar-cli knows it.

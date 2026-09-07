@@ -81,10 +81,35 @@ Access the settings through the gear icon in the extension menu or using your ex
 
 Each provider must be configured with a command that returns JSON output.
 
-Example for Gemini:
+For Gemini usage through Antigravity (`agy`), enable **Antigravity** and choose
+**Auto**. Run `agy` once and complete sign-in first:
+
+```bash
+codexbar --provider antigravity --source auto --format json
+```
+
+CodexBar can launch its own `agy` process or reuse a running one to read quota.
+If the panel shows a dash, open `agy`, let it finish signing in, and refresh.
+A CLI response with `source: "offline"` and `usageKnown: false` contains local
+history, not known quota; it cannot supply a usage percentage. Explicit OAuth
+uses separate credentials and does not use the signed-in local `agy` service.
+See [CodexBar's Antigravity documentation](https://github.com/steipete/CodexBar/blob/main/docs/antigravity.md).
+
+**Gemini CLI (Code Assist)** remains available for supported accounts, including
+Code Assist Standard and Enterprise. Google ended Gemini CLI's Google login for
+individual, AI Pro and Ultra accounts on June 18, 2026; those accounts should use
+Antigravity instead. See [Google's deprecation notice](https://developers.google.com/gemini-code-assist/docs/deprecations/code-assist-individuals).
+
+For a supported Gemini Code Assist account, use **Auto** or **Provider API**:
+
 ```bash
 codexbar --provider gemini --source api --format json
 ```
+
+Although this API path reads Gemini CLI OAuth credentials, CodexBar does not
+accept `--source oauth` for Gemini. The preferences only offer supported sources
+for Gemini and Antigravity; a previously saved unsupported source is marked until
+you explicitly select a supported replacement. Custom commands are preserved.
 
 The extension will automatically attempt to locate the `codexbar` binary in common locations such as `/home/linuxbrew/.linuxbrew/bin/` if an absolute path is not provided. 
 

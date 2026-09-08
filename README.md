@@ -102,7 +102,14 @@ codexbar --provider antigravity --source auto --format json
 ```
 
 CodexBar can launch its own `agy` process or reuse a running one to read quota.
-If the panel shows a dash, open `agy`, let it finish signing in, and refresh.
+If the panel shows a dash, check the Antigravity section in the dropdown.
+The extension retries an offline response once after a short delay. If that
+also returns offline, the dropdown explains that live quotas are unavailable.
+Valid primary and secondary quotas remain visible when additional quota windows
+are absent or empty.
+Open `agy`, let it finish signing in, and refresh. A successful terminal login
+does not guarantee that CodexBar can read the quota service; persistent offline
+responses require further diagnosis rather than repeated sign-ins.
 A CLI response with `source: "offline"` and `usageKnown: false` contains local
 history, not known quota; it cannot supply a usage percentage. Explicit OAuth
 uses separate credentials and does not use the signed-in local `agy` service.

@@ -20,6 +20,11 @@ export class CliSubprocessFetcher extends UsageFetcher {
      * Run the command, parse the output, and discover labels.
      */
     async fetch(providerCommand, cancellable = null) {
+        return this._fetch(providerCommand, cancellable, true);
+    }
+
+    async _fetch(providerCommand, cancellable, allowRetry) {
+        cancellable?.set_error_if_cancelled();
         if (!providerCommand) {
             throw new UsageApiError("No command configured / No hay ningún comando configurado.");
         }
@@ -119,6 +124,40 @@ export class CliSubprocessFetcher extends UsageFetcher {
 
         const trimmedStdout = stdout.trim();
         const trimmedStderr = stderr.trim();
+        cancellable?.set_error_if_cancelled();
+
+        const rawData = this._parseOutput(trimmedStdout, trimmedStderr);
+        if (rawData?.provider === 'antigravity') {
+            // Offline snapshots contain local history, not live quota. A fresh
+            // agy session can recover on the next invocation without a login.
+            if (rawData.source === 'offline' || rawData.usage?.loginMethod === 'offline') {
+                if (allowRetry) {
+                    await new Promise((resolve) => {
+                        GLib.timeout_add(GLib.PRIORITY_DEFAULT, 1000, () => {
+                            resolve();
+                            return GLib.SOURCE_REMOVE;
+                        });
+                    });
+                    return this._fetch(providerCommand, cancellable, false);
+                }
+                throw new UsageApiError(
+                    'Antigravity live quotas are unavailable after retrying. ' +
+                    'CodexBar returned offline history, not quota data. ' +
+                    'If agy is already signed in, its quota service may still be unavailable.'
+                );
+            }
+
+            const windows = rawData.usage?.extraRateWindows;
+            if (Array.isArray(windows) && windows.length > 0) {
+                // These labels describe this exact snapshot. A text discovery
+                // call would start another agy session and discard its quotas.
+                return {
+                    data: rawData,
+                    labels: windows.map((window) => window.title || 'Usage Window'),
+                    command: finalCommand
+                };
+            }
+        }
 
         // Step 3: Automatic label detection (run command in text mode to parse names)
         let labels = [];
@@ -161,16 +200,14 @@ export class CliSubprocessFetcher extends UsageFetcher {
             // Ignore label discovery failures
         }
 
-        // Step 4: Parse the JSON stdout or format errors
+        return { data: rawData, labels, command: finalCommand };
+    }
+
+    _parseOutput(trimmedStdout, trimmedStderr) {
         if (trimmedStdout && (trimmedStdout.startsWith("[") || trimmedStdout.startsWith("{"))) {
             try {
                 const parsed = JSON.parse(trimmedStdout);
-                const rawData = Array.isArray(parsed) ? parsed[0] : parsed;
-                return {
-                    data: rawData,
-                    labels: labels,
-                    command: finalCommand
-                };
+                return Array.isArray(parsed) ? parsed[0] : parsed;
             } catch (e) {
                 throw new UsageApiError(`JSON Error / Error JSON: ${e.message}`);
             }

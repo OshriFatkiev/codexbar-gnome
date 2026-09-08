@@ -397,7 +397,7 @@ export class UsageApiClient {
         };
 
         const extraWindows = payload?.extraRateWindows || payload?.usage?.extraRateWindows;
-        if (isAnti && extraWindows && Array.isArray(extraWindows)) {
+        if (isAnti && Array.isArray(extraWindows) && extraWindows.length > 0) {
             // Handle multiple quota windows specific to Antigravity
             // Manejar múltiples ventanas de cuota específicas de Antigravity
             const labels = [];

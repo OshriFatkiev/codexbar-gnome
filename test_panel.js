@@ -132,4 +132,16 @@ for (const invalid of [
     "Missing or invalid budgets stay unavailable instead of inventing a percentage");
 }
 console.log("PASS: time-window precedence and unavailable-budget handling are preserved");
+
+// A partial Antigravity response can still carry canonical quota windows.
+// An empty list of additional windows must not erase those valid quotas.
+const antigravityFallback = client.normalizeSummary({
+  primary: { usedPercent: 25, windowMinutes: 300 },
+  secondary: { usedPercent: 10, windowMinutes: 10080 },
+  extraRateWindows: [],
+}, true);
+equal(extension._panelWindows({ data: antigravityFallback }, "remaining", 2)
+  .map((item) => [item.label, item.percent]), [["5h", 75], ["7d", 90]],
+  "Antigravity canonical quotas survive an empty extraRateWindows list");
+console.log("PASS: Antigravity fallback quotas remain visible");
 client.destroy();

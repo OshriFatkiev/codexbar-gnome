@@ -63,11 +63,24 @@ Reviewed by the great GNOME experts, with the confidence of correct operation an
 
 ### From Github  
 1. Clone or fork the repo
-2. Run the `./install` script
-3. - On Wayland:
+2. Ensure `gnome-extensions`, `glib-compile-schemas`, and `unzip` are installed.
+3. Run `./install.sh` from the checkout, or invoke it by its full path from another directory.
+4. - On Wayland:
       - Log out and log in
       - **For fast development and iteration**: Run `dbus-run-session gnome-shell --wayland --devkit`. You need to have installed Mutter Devkit
    - On X11: `Alt+F2` and type `r` and press enter.
+
+The installer builds and checks a fresh ZIP before replacing the extension.
+Existing provider settings are preserved. Before an upgrade, it saves the
+installed files under `${XDG_STATE_HOME:-~/.local/state}/codexbar/install-backups/`
+and prints the exact backup path. If replacement fails, it restores those files
+and keeps any partial replacement beside the backup for diagnosis.
+
+An enable failure returns a nonzero exit status but leaves the successfully
+installed files in place. Follow the printed instructions to log out and back
+in, then enable the extension. A successful upgrade still needs the session
+reload described above to run the new code. To build a ZIP without installing,
+run `./build.sh`.
 
 ### From Unofficial Gnome Shell Store
 I am working on a very interesting concept to present, which is the automated review of extensions with AI. 

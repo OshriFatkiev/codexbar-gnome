@@ -1,5 +1,4 @@
 import Gio from "gi://Gio";
-import Pango from "gi://Pango";
 import { UsageApiClient, deriveCreditsPercent, normalizeDetailSections } from "./usageApi.js";
 import { OllamaSettingsFetcher } from "./adapters/OllamaSettingsFetcher.js";
 
@@ -23,8 +22,8 @@ const scheduler = {
   source_remove(id) { timers.delete(id); },
 };
 const Extension = new Function(
-  "Extension", "_", "deriveCreditsPercent", "normalizeDetailSections", "GLib", "nullTokenSchema", "Pango", source,
-)(class {}, (text) => text, deriveCreditsPercent, normalizeDetailSections, scheduler, () => {}, Pango);
+  "Extension", "_", "deriveCreditsPercent", "normalizeDetailSections", "GLib", "nullTokenSchema", source,
+)(class {}, (text) => text, deriveCreditsPercent, normalizeDetailSections, scheduler, () => {});
 const extension = new Extension();
 let clockFormat = "24h";
 extension._clockSettings = { get_string: () => clockFormat };
@@ -91,7 +90,7 @@ for (const mode of ["remaining", "used"]) {
   equal(compact[0].percent, mode === "remaining" ? 0 : 100, "Progress remains the real percentage");
   const expanded = extension._panelWindows(exhausted, mode, 2, now);
   equal(expanded.map((w) => extension._panelMetricText(w, now, "en-US")),
-    ["↻ 14:30", "↻ Fri 14:30"], "Expanded mode shows each window's own reset");
+    ["◷ 14:30", "◷ Fri 14:30"], "Expanded mode shows each window's own reset");
   for (const missing of [undefined, NaN, Infinity, now - 1000]) {
     const unknown = extension._panelWindows(
       data(window(100, 18000, today), window(100, 604800, missing)), mode, 1, now);
@@ -105,32 +104,29 @@ for (const mode of ["remaining", "used"]) {
 const metric = { label: "5h", used: 100, percent: 0, resetAtMs: today };
 equal(extension._panelMetricText(metric, today, "en-US"), "5h 0%", "Elapsed resets revert to percentage");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2026, 8, 14, 14, 30).getTime() }, now, "en-US"),
-  "↻ Mon 14:30", "The sixth future calendar day uses a weekday");
+  "◷ Mon 14:30", "The sixth future calendar day uses a weekday");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2026, 8, 15, 14, 30).getTime() }, now, "en-US"),
-  "↻ Sep 15 14:30", "More distant resets include a month and date");
+  "◷ Sep 15 14:30", "More distant resets include a month and date");
 clockFormat = "12h";
-equal(extension._panelMetricText(metric, now, "en-US"), "↻ 2:30 PM", "Desktop 12-hour preference is honored");
+equal(extension._panelMetricText(metric, now, "en-US"), "◷ 2:30 PM", "Desktop 12-hour preference is honored");
 clockFormat = "24h";
 const midnight = new Date(2026, 8, 9, 0, 0).getTime();
 const tomorrow = { ...metric, resetAtMs: midnight + 1800000 };
-equal(extension._panelMetricText(tomorrow, midnight - 60000, "en-US"), "↻ Wed 00:30",
+equal(extension._panelMetricText(tomorrow, midnight - 60000, "en-US"), "◷ Wed 00:30",
   "Tomorrow is based on the local calendar");
-equal(extension._panelMetricText(tomorrow, midnight, "en-US"), "↻ 00:30",
+equal(extension._panelMetricText(tomorrow, midnight, "en-US"), "◷ 00:30",
   "The weekday disappears at local midnight");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2026, 10, 1, 14, 30).getTime() },
-  new Date(2026, 9, 26, 14, 30).getTime(), "en-US"), "↻ Sun 14:30",
+  new Date(2026, 9, 26, 14, 30).getTime(), "en-US"), "◷ Sun 14:30",
   "Six calendar days still use a weekday across the autumn DST change");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2027, 0, 1, 0, 30).getTime() },
-  new Date(2026, 11, 31, 23, 30).getTime(), "en-US"), "↻ Fri 00:30",
+  new Date(2026, 11, 31, 23, 30).getTime(), "en-US"), "◷ Fri 00:30",
   "Tomorrow's weekday also works across a year boundary");
 console.log("PASS: exhaustion, blocking resets, clock format, and calendar boundaries");
 
 // Drive the real update/render path and timer callback without fetching or Shell actors.
 const actor = () => ({ visible: false, destroy() {} });
-const label = () => ({
-  text: "", get_text() { return this.text; }, set_text(text) { this.text = text; },
-  clutter_text: { attributes: null, set_attributes(attrs) { this.attributes = attrs; } },
-});
+const label = () => ({ text: "", get_text() { return this.text; }, set_text(text) { this.text = text; } });
 extension._providers = [{ name: "Example" }];
 extension._activeProviderIndex = 0;
 extension._settings = {
@@ -144,9 +140,7 @@ extension._syncTrackWidths = () => {};
 extension._applyMetricFill = (m) => equal(m.percent, 0, "Exhausted remaining progress stays empty");
 extension._refreshData = () => { throw new Error("Label redraw must never fetch usage"); };
 extension._updatePanel("remaining");
-equal(renderedMetric.label.text.startsWith("↻ "), true, "The actual actor receives the reset label");
-equal(renderedMetric.label.clutter_text.attributes?.get_iterator().range(), [0, 3],
-  "Only the reset arrow's three UTF-8 bytes receive emphasis");
+equal(renderedMetric.label.text.startsWith("◷ "), true, "The actual actor receives the reset label");
 equal(timers.size, 1, "Visible reset labels start one timer");
 extension._updatePanel("remaining");
 equal(timers.size, 1, "Repeated rendering does not duplicate timers");
@@ -155,14 +149,12 @@ timers.delete(timerId);
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() - 1000;
 equal(callback(), scheduler.SOURCE_REMOVE, "The minute callback is a one-shot local redraw");
 equal(renderedMetric.label.text, "5h 0%", "The timer removes an expired reset label");
-equal(renderedMetric.label.clutter_text.attributes, null, "Percentages do not inherit arrow emphasis");
 equal(timers.size, 0, "No timer remains when no reset labels are visible");
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() + 3600000;
 extension._updatePanel("remaining");
 extension._providersData = [];
 extension._updatePanel("remaining");
 equal(timers.size, 0, "Unavailable data also removes the reset timer");
-equal(renderedMetric.label.clutter_text.attributes, null, "Unavailable data does not inherit arrow emphasis");
 extension._providersData = [data(window(100, 18000, Date.now() + 3600000))];
 extension._updatePanel("remaining");
 let disconnected = false;

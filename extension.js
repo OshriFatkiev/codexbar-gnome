@@ -1344,7 +1344,7 @@ export default class CodexBarExtension extends Extension {
     });
     const date = daysAhead === 0 ? "" : reset.toLocaleDateString(locale,
       daysAhead <= 6 ? { weekday: "short" } : { month: "short", day: "numeric" });
-    return `↻ ${date ? `${date} ` : ""}${time}`;
+    return `◷ ${date ? `${date} ` : ""}${time}`;
   }
 
   _stopPanelResetTimer() {
@@ -1398,22 +1398,7 @@ export default class CodexBarExtension extends Extension {
       setVisible(metric.box, !!win);
       if (!win) return;
       const text = this._panelMetricText(win, nowMs);
-      if (metric.label.get_text() !== text) {
-        metric.label.set_text(text);
-        let attributes = null;
-        if (this._hasPanelReset(win, nowMs)) {
-          attributes = new Pango.AttrList();
-          const weight = Pango.attr_weight_new(Pango.Weight.BOLD);
-          const scale = Pango.attr_scale_new(1.2);
-          // Pango ranges use UTF-8 bytes: emphasize only the three-byte ↻.
-          for (const attribute of [weight, scale]) {
-            attribute.start_index = 0;
-            attribute.end_index = 3;
-            attributes.insert(attribute);
-          }
-        }
-        metric.label.clutter_text.set_attributes(attributes);
-      }
+      if (metric.label.get_text() !== text) metric.label.set_text(text);
       metric.percent = win.percent;
       this._applyMetricFill(metric);
     });
@@ -1423,10 +1408,7 @@ export default class CodexBarExtension extends Extension {
     if (entry.windows.length === 0) {
       const metric = group.metrics[0];
       setVisible(metric.box, true);
-      if (metric.label.get_text() !== "—") {
-        metric.label.set_text("—");
-        metric.label.clutter_text.set_attributes(null);
-      }
+      if (metric.label.get_text() !== "—") metric.label.set_text("—");
       metric.percent = 0;
       this._applyMetricFill(metric);
     }

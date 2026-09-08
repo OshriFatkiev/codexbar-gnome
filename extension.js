@@ -1404,10 +1404,13 @@ export default class CodexBarExtension extends Extension {
         if (this._hasPanelReset(win, nowMs)) {
           attributes = new Pango.AttrList();
           const weight = Pango.attr_weight_new(Pango.Weight.BOLD);
+          const scale = Pango.attr_scale_new(1.2);
           // Pango ranges use UTF-8 bytes: emphasize only the three-byte ↻.
-          weight.start_index = 0;
-          weight.end_index = 3;
-          attributes.insert(weight);
+          for (const attribute of [weight, scale]) {
+            attribute.start_index = 0;
+            attribute.end_index = 3;
+            attributes.insert(attribute);
+          }
         }
         metric.label.clutter_text.set_attributes(attributes);
       }

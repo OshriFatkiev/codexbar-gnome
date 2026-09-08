@@ -141,11 +141,7 @@ export class CliSubprocessFetcher extends UsageFetcher {
                     });
                     return this._fetch(providerCommand, cancellable, false);
                 }
-                throw new UsageApiError(
-                    'Antigravity live quotas are unavailable after retrying. ' +
-                    'CodexBar returned offline history, not quota data. ' +
-                    'If agy is already signed in, its quota service may still be unavailable.'
-                );
+                throw new UsageApiError('live quotas unavailable');
             }
 
             const windows = rawData.usage?.extraRateWindows;

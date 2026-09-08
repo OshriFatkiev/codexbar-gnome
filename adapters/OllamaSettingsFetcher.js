@@ -207,6 +207,9 @@ export class OllamaSettingsFetcher extends UsageFetcher {
             usedPercent: best.percent,
             windowSeconds,
             resetDescription,
+            resetAfterSeconds,
+            resetAtMs: Number.isFinite(resetAfterSeconds) && resetAfterSeconds > 0
+                ? Date.now() + resetAfterSeconds * 1000 : undefined,
         };
     }
 

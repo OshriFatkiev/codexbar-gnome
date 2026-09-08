@@ -40,7 +40,7 @@ const normalizePercentValue = (rawPercent, mode = 'used') => {
     return Math.min(1, Math.max(0, percent));
 };
 
-const makeWindow = (obj) => {
+const makeWindow = (obj, nowMs = Date.now()) => {
     if (!obj || typeof obj !== 'object') return null;
 
     let window_seconds =
@@ -59,9 +59,22 @@ const makeWindow = (obj) => {
         obj.reset_after ||
         0;
     if (!reset_after_seconds && obj.resetsAt) {
-        const diffMs = new Date(obj.resetsAt).getTime() - Date.now();
+        const diffMs = new Date(obj.resetsAt).getTime() - nowMs;
         reset_after_seconds = Math.max(0, Math.round(diffMs / 1000));
     }
+
+    // Freeze relative resets when data arrives. Preserve even a past absolute
+    // deadline so normalizing cached data cannot move it into the future.
+    const absoluteReset = Number.isFinite(obj.resetAtMs)
+        ? obj.resetAtMs
+        : (obj.resetsAt ? new Date(obj.resetsAt).getTime() : NaN);
+    const relativeSeconds = Number(reset_after_seconds);
+    const candidateReset = Number.isFinite(absoluteReset)
+        ? absoluteReset
+        : (Number.isFinite(relativeSeconds) && relativeSeconds > 0
+            ? nowMs + relativeSeconds * 1000 : NaN);
+    const resetAtMs = Number.isFinite(new Date(candidateReset).getTime())
+        ? candidateReset : undefined;
 
     const rawUsedPercent = obj.used_percent ?? obj.usedPercent;
     if (rawUsedPercent !== undefined) {
@@ -72,7 +85,8 @@ const makeWindow = (obj) => {
                 limit: 1,
                 percent,
                 window_seconds,
-                reset_after_seconds
+                reset_after_seconds,
+                resetAtMs
             };
         }
     }
@@ -87,7 +101,8 @@ const makeWindow = (obj) => {
                 limit: 1,
                 percent,
                 window_seconds,
-                reset_after_seconds
+                reset_after_seconds,
+                resetAtMs
             };
         }
     }
@@ -109,7 +124,8 @@ const makeWindow = (obj) => {
                 limit,
                 percent: Math.min(1, Math.max(0, used / limit)),
                 window_seconds,
-                reset_after_seconds
+                reset_after_seconds,
+                resetAtMs
             };
         }
     }
@@ -355,7 +371,7 @@ export class UsageApiClient {
      * Normalize the API payload into a unified structure.
      * Normaliza el payload de la API en una estructura unificada.
      */
-    normalizeSummary(payload, isAntigravity = false) {
+    normalizeSummary(payload, isAntigravity = false, nowMs = Date.now()) {
         // Detect if the provider is antigravity
         // Detectar si el proveedor es antigravity
         const isAnti = isAntigravity ||
@@ -364,7 +380,7 @@ export class UsageApiClient {
             payload?.usage?.identity?.providerID === "antigravity";
 
         const mapSingle = (obj) => {
-            const win = makeWindow(obj);
+            const win = makeWindow(obj, nowMs);
             if (!win) return null;
 
             return {
@@ -374,7 +390,8 @@ export class UsageApiClient {
                     win.window_seconds
                 ) || obj?.resetDescription || '',
                 windowSeconds: win.window_seconds,
-                resetAfterSeconds: win.reset_after_seconds
+                resetAfterSeconds: win.reset_after_seconds,
+                resetAtMs: win.resetAtMs
             };
         };
 
@@ -523,7 +540,7 @@ export class UsageApiClient {
         }
 
         // Otherwise, fall back to recursive extraction
-        const windows = this.extractWindows(payload);
+        const windows = this.extractWindows(payload, nowMs);
         const sorted = windows.sort((a, b) => (a.window_seconds || 0) - (b.window_seconds || 0));
         
         const mapWindow = (w, existing) => w ? {
@@ -533,7 +550,8 @@ export class UsageApiClient {
                 w.window_seconds
             ) || '',
             windowSeconds: w.window_seconds,
-            resetAfterSeconds: w.reset_after_seconds
+            resetAfterSeconds: w.reset_after_seconds,
+            resetAtMs: w.resetAtMs
         } : null;
 
         return {
@@ -554,7 +572,7 @@ export class UsageApiClient {
      * Recursively extract usage windows from any JSON structure.
      * Extrae recursivamente las ventanas de uso de cualquier estructura JSON.
      */
-    extractWindows(payload) {
+    extractWindows(payload, nowMs = Date.now()) {
         const windows = [];
         const seen = new Set();
         const canonicalWindows = [];
@@ -570,11 +588,11 @@ export class UsageApiClient {
                 'secondary',
                 'tertiary',
                 'quaternary',
-            ].forEach((key) => addWindow(canonicalWindows, makeWindow(rateLimit[key])));
+            ].forEach((key) => addWindow(canonicalWindows, makeWindow(rateLimit[key], nowMs)));
         }
 
         ['primary', 'secondary', 'tertiary', 'quaternary'].forEach((key) =>
-            addWindow(canonicalWindows, makeWindow(payload?.[key] || payload?.usage?.[key]))
+            addWindow(canonicalWindows, makeWindow(payload?.[key] || payload?.usage?.[key], nowMs))
         );
 
         if (canonicalWindows.length > 0) {
@@ -585,7 +603,7 @@ export class UsageApiClient {
             if (!obj || typeof obj !== 'object' || seen.has(obj)) return;
             seen.add(obj);
 
-            addWindow(windows, makeWindow(obj));
+            addWindow(windows, makeWindow(obj, nowMs));
 
             // Recurse into all keys
             // Recorrer todas las claves

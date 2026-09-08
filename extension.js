@@ -216,6 +216,11 @@ export default class CodexBarExtension extends Extension {
       "changed::dev-custom-output-json", () => this._onSettingsChanged(),
       this
     );
+    this._clockSettings = new Gio.Settings({ schema_id: "org.gnome.desktop.interface" });
+    this._clockSettings.connectObject(
+      "changed::clock-format", () => this._updatePanel(this._settings.get_string("display-mode")),
+      this,
+    );
     this._onSettingsChanged();
   }
 
@@ -224,6 +229,11 @@ export default class CodexBarExtension extends Extension {
    * Se llama cuando la extensión se desactiva.
    */
   disable() {
+    this._stopPanelResetTimer();
+    if (this._clockSettings) {
+      this._clockSettings.disconnectObject(this);
+      this._clockSettings = null;
+    }
     // Step 1: Clean up the API client
     // Paso 1: Limpiar el cliente de la API
     if (this._apiClient) {
@@ -1216,14 +1226,15 @@ export default class CodexBarExtension extends Extension {
    *
    * The exception is a longer window at or past PANEL_ESCALATE_USED_PERCENT,
    * which is close enough to exhaustion to be worth interrupting for.
-   * An exhausted window always wins; if both are exhausted, keep the shorter.
+   * An exhausted window always wins. When both are exhausted, show the later
+   * reset, or a percentage if either blocking reset is unknown.
    *
    * @param {object} providerData Entry from _providersData.
    * @param {string} displayMode "used" or "remaining".
    * @param {number} limit Maximum windows to return.
    * @returns {Array<{label: string, percent: number}>}
    */
-  _panelWindows(providerData, displayMode, limit) {
+  _panelWindows(providerData, displayMode, limit, nowMs = Date.now()) {
     const usage = providerData?.data?.usage;
     const windows = [];
 
@@ -1237,6 +1248,7 @@ export default class CodexBarExtension extends Extension {
         label,
         used,
         windowSeconds: win.windowSeconds,
+        resetAtMs: win.resetAtMs,
         percent: displayMode === "remaining" ? 100 - used : used,
       });
     });
@@ -1264,7 +1276,14 @@ export default class CodexBarExtension extends Extension {
 
     windows.sort((a, b) => a.windowSeconds - b.windowSeconds);
     const exhausted = windows.filter((w) => w.used >= 100);
-    if (exhausted.length > 0) return exhausted.slice(0, limit);
+    if (exhausted.length > 0) {
+      // Both constraints must clear before use can resume. An unknown reset
+      // takes precedence over a known one so we do not suggest a false time.
+      const unknown = exhausted.filter((w) => !this._hasPanelReset(w, nowMs));
+      return unknown.length > 0
+        ? unknown.slice(0, limit)
+        : exhausted.sort((a, b) => b.resetAtMs - a.resetAtMs).slice(0, limit);
+    }
 
     const escalated = windows
       .slice(limit)
@@ -1304,12 +1323,56 @@ export default class CodexBarExtension extends Extension {
     }
   }
 
+  _hasPanelReset(win, nowMs = Date.now()) {
+    return win.used >= 100 && Number.isFinite(win.resetAtMs) &&
+      Number.isFinite(new Date(win.resetAtMs).getTime()) && win.resetAtMs > nowMs;
+  }
+
+  _panelMetricText(win, nowMs = Date.now(), locale = undefined) {
+    if (!this._hasPanelReset(win, nowMs))
+      return `${win.label} ${Math.round(win.percent)}%`;
+
+    const reset = new Date(win.resetAtMs);
+    const now = new Date(nowMs);
+    // Compare calendar days, not elapsed hours, across midnight and DST.
+    const dayNumber = (date) => Date.UTC(date.getFullYear(), date.getMonth(), date.getDate()) / 86400000;
+    const daysAhead = dayNumber(reset) - dayNumber(now);
+    const hour12 = this._clockSettings?.get_string("clock-format") === "12h";
+    const time = reset.toLocaleTimeString(locale, {
+      hour: hour12 ? "numeric" : "2-digit", minute: "2-digit",
+      hourCycle: hour12 ? "h12" : "h23",
+    });
+    const date = daysAhead === 0 ? "" : reset.toLocaleDateString(locale,
+      daysAhead <= 6 ? { weekday: "short" } : { month: "short", day: "numeric" });
+    return `↻ ${date ? `${date} ` : ""}${time}`;
+  }
+
+  _stopPanelResetTimer() {
+    if (this._panelResetTimeoutId) {
+      GLib.source_remove(this._panelResetTimeoutId);
+      this._panelResetTimeoutId = null;
+    }
+  }
+
+  _syncPanelResetTimer(needed) {
+    if (!needed) {
+      this._stopPanelResetTimer();
+    } else if (!this._panelResetTimeoutId) {
+      this._panelResetTimeoutId = GLib.timeout_add_seconds(GLib.PRIORITY_DEFAULT, 60, () => {
+        this._panelResetTimeoutId = null;
+        // Redraw cached data only; regular provider polling owns quota updates.
+        this._updatePanel(this._settings.get_string("display-mode"));
+        return GLib.SOURCE_REMOVE;
+      });
+    }
+  }
+
   /**
    * Populate one panel group with a provider's logo and windows.
    * @param {number} index Group index.
    * @param {{provider: object, windows: Array}} entry
    */
-  _fillPanelGroup(index, entry) {
+  _fillPanelGroup(index, entry, nowMs = Date.now()) {
     const group = this._panelGroups[index];
     if (!group) return;
 
@@ -1334,7 +1397,7 @@ export default class CodexBarExtension extends Extension {
       const win = entry.windows[i];
       setVisible(metric.box, !!win);
       if (!win) return;
-      const text = `${win.label} ${Math.round(win.percent)}%`;
+      const text = this._panelMetricText(win, nowMs);
       if (metric.label.get_text() !== text) metric.label.set_text(text);
       metric.percent = win.percent;
       this._applyMetricFill(metric);
@@ -1360,6 +1423,7 @@ export default class CodexBarExtension extends Extension {
    * @param {string} displayMode "used" or "remaining".
    */
   _updatePanel(displayMode) {
+    const nowMs = Date.now();
     // _updateUI can be reached with nothing configured, via a settings watcher
     // rather than a refresh.
     setVisible(this._panelFallbackIcon, this._providers.length === 0);
@@ -1373,7 +1437,7 @@ export default class CodexBarExtension extends Extension {
     const entries = showAll
       ? this._providers.map((provider, i) => ({
           provider,
-          windows: this._panelWindows(this._providersData[i], displayMode, 1),
+          windows: this._panelWindows(this._providersData[i], displayMode, 1, nowMs),
         }))
       : [
           {
@@ -1382,16 +1446,19 @@ export default class CodexBarExtension extends Extension {
               this._providersData[this._activeProviderIndex],
               displayMode,
               2,
+              nowMs,
             ),
           },
         ];
 
     this._ensurePanelGroups(entries.length);
     this._panelGroups.forEach((group, i) => {
-      if (i < entries.length) this._fillPanelGroup(i, entries[i]);
+      if (i < entries.length) this._fillPanelGroup(i, entries[i], nowMs);
       else setVisible(group.box, false);
     });
     this._syncTrackWidths();
+    this._syncPanelResetTimer(entries.some((entry) =>
+      entry.windows.some((win) => this._hasPanelReset(win, nowMs))));
   }
 
   /**

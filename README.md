@@ -9,6 +9,7 @@ A GNOME Shell extension to monitor AI provider usage metrics directly from the s
 - Real-time monitoring of AI provider usage (Gemini, OpenAI, etc).
 - Support for standard Codex and Codex Spark 5-hour/weekly usage tiers
 - Toggle between Remaining Quota and Used Quota display modes.
+- Show local reset times for exhausted limits, using the desktop's 12/24-hour clock preference.
 - Automatic background refreshes with configurable intervals.
 - Visual warnings (color changes) when reaching quota limits.
 - Automatic resolution of CodexBar CLI paths (Homebrew supported).
@@ -16,6 +17,13 @@ A GNOME Shell extension to monitor AI provider usage metrics directly from the s
 - Render Code review usage when the Linux API supplies it
 - Add regression coverage for the new normalization and pace calculation
 - Added support to show AI economic expenditure
+
+When a limit is fully exhausted, its panel label becomes `↻ 14:30` for a reset
+today, `↻ Fri 14:30` within the next six calendar days, or `↻ Sep 15 14:30`
+further ahead. In the compact view, two exhausted windows show the later reset.
+If a blocking window has no known future reset, the percentage stays visible.
+Reset labels redraw locally once a minute without extra provider requests; after
+the deadline, the percentage returns until a regular refresh confirms new quota.
 
 ## Updates  
 - Support Codex Spark usage tiers from the direct ChatGPT endpoint (`additional_rate_limits`)

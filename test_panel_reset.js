@@ -1,4 +1,5 @@
 import Gio from "gi://Gio";
+import Pango from "gi://Pango";
 import { UsageApiClient, deriveCreditsPercent, normalizeDetailSections } from "./usageApi.js";
 import { OllamaSettingsFetcher } from "./adapters/OllamaSettingsFetcher.js";
 
@@ -22,8 +23,8 @@ const scheduler = {
   source_remove(id) { timers.delete(id); },
 };
 const Extension = new Function(
-  "Extension", "_", "deriveCreditsPercent", "normalizeDetailSections", "GLib", "nullTokenSchema", source,
-)(class {}, (text) => text, deriveCreditsPercent, normalizeDetailSections, scheduler, () => {});
+  "Extension", "_", "deriveCreditsPercent", "normalizeDetailSections", "GLib", "nullTokenSchema", "Pango", source,
+)(class {}, (text) => text, deriveCreditsPercent, normalizeDetailSections, scheduler, () => {}, Pango);
 const extension = new Extension();
 let clockFormat = "24h";
 extension._clockSettings = { get_string: () => clockFormat };
@@ -126,7 +127,10 @@ console.log("PASS: exhaustion, blocking resets, clock format, and calendar bound
 
 // Drive the real update/render path and timer callback without fetching or Shell actors.
 const actor = () => ({ visible: false, destroy() {} });
-const label = () => ({ text: "", get_text() { return this.text; }, set_text(text) { this.text = text; } });
+const label = () => ({
+  text: "", get_text() { return this.text; }, set_text(text) { this.text = text; },
+  clutter_text: { attributes: null, set_attributes(attrs) { this.attributes = attrs; } },
+});
 extension._providers = [{ name: "Example" }];
 extension._activeProviderIndex = 0;
 extension._settings = {
@@ -141,6 +145,8 @@ extension._applyMetricFill = (m) => equal(m.percent, 0, "Exhausted remaining pro
 extension._refreshData = () => { throw new Error("Label redraw must never fetch usage"); };
 extension._updatePanel("remaining");
 equal(renderedMetric.label.text.startsWith("↻ "), true, "The actual actor receives the reset label");
+equal(renderedMetric.label.clutter_text.attributes?.get_iterator().range(), [0, 3],
+  "Only the reset arrow's three UTF-8 bytes receive emphasis");
 equal(timers.size, 1, "Visible reset labels start one timer");
 extension._updatePanel("remaining");
 equal(timers.size, 1, "Repeated rendering does not duplicate timers");
@@ -149,12 +155,14 @@ timers.delete(timerId);
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() - 1000;
 equal(callback(), scheduler.SOURCE_REMOVE, "The minute callback is a one-shot local redraw");
 equal(renderedMetric.label.text, "5h 0%", "The timer removes an expired reset label");
+equal(renderedMetric.label.clutter_text.attributes, null, "Percentages do not inherit arrow emphasis");
 equal(timers.size, 0, "No timer remains when no reset labels are visible");
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() + 3600000;
 extension._updatePanel("remaining");
 extension._providersData = [];
 extension._updatePanel("remaining");
 equal(timers.size, 0, "Unavailable data also removes the reset timer");
+equal(renderedMetric.label.clutter_text.attributes, null, "Unavailable data does not inherit arrow emphasis");
 extension._providersData = [data(window(100, 18000, Date.now() + 3600000))];
 extension._updatePanel("remaining");
 let disconnected = false;

@@ -300,7 +300,12 @@ export class UsageApiClient {
         this._session.set_timeout(30);
         this._soupFetcher = new SoupApiFetcher(this._session);
         this._ollamaFetcher = new OllamaSettingsFetcher(this._session);
-        this._cliFetcher = new CliSubprocessFetcher(extensionPath);
+        this._cliFetcher = new CliSubprocessFetcher(extensionPath, (data) => {
+            if (!data) return [];
+            // The extension uses these normalized labels in preference to CLI
+            // text labels, so discovering text cannot improve this snapshot.
+            return this.normalizeSummary(data.usage || data, data.provider === 'antigravity').labels || [];
+        });
     }
 
     /**

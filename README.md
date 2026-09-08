@@ -94,6 +94,11 @@ Access the settings through the gear icon in the extension menu or using your ex
 
 Each provider must be configured with a command that returns JSON output.
 
+Structured quota responses use a single CLI call per refresh when their labels
+can be derived from JSON. Legacy responses still use a second text-mode call
+when needed to discover labels. This does not change provider connections or
+add automatic retries for other providers.
+
 For Gemini usage through Antigravity (`agy`), enable **Antigravity** and choose
 **Auto**. Run `agy` once and complete sign-in first:
 

@@ -11,9 +11,10 @@ import { UsageApiError } from '../usageApi.js';
  * quick discovery pass to read the text labels for the provider's active windows.
  */
 export class CliSubprocessFetcher extends UsageFetcher {
-    constructor(extensionPath = null) {
+    constructor(extensionPath = null, labelResolver = null) {
         super();
         this._extensionPath = extensionPath;
+        this._labelResolver = labelResolver;
     }
 
     /**
@@ -159,8 +160,14 @@ export class CliSubprocessFetcher extends UsageFetcher {
             }
         }
 
-        // Step 3: Automatic label detection (run command in text mode to parse names)
-        let labels = [];
+        // The client can derive the labels that the UI will use from this
+        // snapshot. Only discover text labels when JSON cannot supply them.
+        let labels = this._labelResolver?.(rawData) || [];
+        if (labels.length > 0) {
+            return { data: rawData, labels, command: finalCommand };
+        }
+
+        // Step 3: Legacy label discovery (run command in text mode to parse names)
         try {
             const discoveryArgv = argv.filter((arg, index) => {
                 if (arg === "--format") return false;

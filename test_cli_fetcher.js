@@ -84,8 +84,37 @@ const tests = [
         equal(Boolean(error), true, 'Cancel the pending fetch');
         equal(cli.calls(), 1, 'Do not retry a cancelled refresh');
     }],
-    ['other providers retain text label discovery', async () => {
-        const cli = command({provider: 'codex', usage: {primary: {usedPercent: 25}}}, {});
+    ['structured providers use the same labels as the normalizer in one invocation', async () => {
+        for (const provider of ['codex', 'claude', 'custom-provider']) {
+            const payload = {provider, usage: {
+                primary: {usedPercent: 25, windowMinutes: 300},
+                secondary: {usedPercent: 10, windowMinutes: 10080},
+            }};
+            const cli = command(payload, {});
+            const result = await client.fetchCliSummary(cli.text);
+            equal(cli.calls(), 1, `${provider} does not need text discovery`);
+            equal(result.labels, ['5-Hour Window', 'Weekly Window'], 'Preserve displayed labels');
+            equal(result.data, payload, 'Keep the raw response intact');
+        }
+    }],
+    ['additional named windows retain their label and tier order', async () => {
+        const cli = command({provider: 'codex', usage: {
+            primary: {usedPercent: 25, windowMinutes: 300},
+            secondary: {usedPercent: 10, windowMinutes: 10080},
+            extraRateWindows: [{title: 'Codex Spark', window: {usedPercent: 5, windowMinutes: 300}}],
+        }}, {});
+        const result = await client.fetchCliSummary(cli.text);
+        equal(cli.calls(), 1, 'Named additional windows need no text discovery');
+        equal(result.labels, ['5-Hour Window', 'Weekly Window', 'Codex Spark'], 'Keep the additional label in order');
+    }],
+    ['flat structured custom responses also avoid text discovery', async () => {
+        const cli = command({primary: {usedPercent: 25, windowMinutes: 300}}, {});
+        const result = await client.fetchCliSummary(cli.text);
+        equal(cli.calls(), 1, 'No dependency on a provider name or usage wrapper');
+        equal(result.labels, ['5-Hour Window'], 'Use the existing normalized label');
+    }],
+    ['legacy responses without normalized labels retain text discovery', async () => {
+        const cli = command({usage: {used: 25, limit: 100, windowSeconds: 18000}}, {});
         GLib.file_set_contents(paths.at(-1), 'Session: 25% used\nWeekly: 10% used\n');
         const result = await client.fetchCliSummary(cli.text);
         equal(result.labels, ['Session', 'Weekly'], 'Preserve existing provider labels');

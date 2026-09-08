@@ -651,7 +651,7 @@ const CodexBarPrefsPage = GObject.registerClass(
         const row = new Adw.ExpanderRow({
           title: info.name,
           subtitle: isEnabled ? _("Enabled") : _("Disabled"),
-          expanded: isEnabled,
+          expanded: false,
         });
 
         row._id = activeData ? activeData.id : info.id;

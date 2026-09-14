@@ -1346,11 +1346,11 @@ export default class CodexBarExtension extends Extension {
       const totalHours = Math.floor(totalMinutes / 60);
       if (totalHours < 24) {
         const minutes = totalMinutes % 60;
-        return `◷ ${totalHours}h${minutes ? ` ${minutes}m` : ""}`;
+        return `◷ ${totalHours}h${minutes ? `${minutes}m` : ""}`;
       }
       const days = Math.floor(totalHours / 24);
       const hours = totalHours % 24;
-      return `◷ ${days}d${hours ? ` ${hours}h` : ""}`;
+      return `◷ ${days}d${hours ? `${hours}h` : ""}`;
     }
 
     const reset = new Date(win.resetAtMs);

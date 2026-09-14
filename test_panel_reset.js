@@ -135,26 +135,26 @@ resetDisplay = "remaining";
 for (const [seconds, expected] of [
   [1, "1m"], [59, "1m"], [60, "1m"], [61, "2m"],
   [2700, "45m"], [3540, "59m"], [3541, "1h"], [3600, "1h"],
-  [3601, "1h 1m"], [8100, "2h 15m"], [86340, "23h 59m"],
+  [3601, "1h1m"], [8100, "2h15m"], [86340, "23h59m"],
   [86341, "1d"], [86400, "1d"], [86460, "1d"],
-  [90000, "1d 1h"], [172800, "2d"], [184500, "2d 3h"],
+  [90000, "1d1h"], [172800, "2d"], [184500, "2d3h"],
 ]) {
   equal(extension._panelMetricText({ ...metric, resetAtMs: now + seconds * 1000 }, now),
     `◷ ${expected}`, `Countdown rounds and formats ${seconds} seconds`);
 }
 clockFormat = "12h";
-equal(extension._panelMetricText(metric, now), "◷ 2h 30m", "Countdown ignores desktop clock format");
+equal(extension._panelMetricText(metric, now), "◷ 2h30m", "Countdown ignores desktop clock format");
 clockFormat = "24h";
 for (const mode of ["remaining", "used"]) {
   for (const limit of [1, 2]) {
     const windows = extension._panelWindows(exhausted, mode, limit, now);
     equal(windows.map((w) => extension._panelMetricText(w, now)),
-      limit === 1 ? ["◷ 3d 2h"] : ["◷ 2h 30m", "◷ 3d 2h"],
+      limit === 1 ? ["◷ 3d2h"] : ["◷ 2h30m", "◷ 3d2h"],
       "Countdown preserves compact and expanded exhausted window selection");
     const mixed = extension._panelWindows(
       data(window(50, 18000, today), window(100, 604800, friday)), mode, limit, now);
     equal(mixed.map((w) => extension._panelMetricText(w, now)),
-      limit === 1 ? ["◷ 3d 2h"] : ["5h 50%", "◷ 3d 2h"],
+      limit === 1 ? ["◷ 3d2h"] : ["5h 50%", "◷ 3d2h"],
       "Only the exhausted window switches to a countdown");
   }
 }

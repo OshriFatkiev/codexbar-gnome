@@ -16,7 +16,7 @@ The extension is still named **CodexBar**. This fork is maintained independently
 - Antigravity offline recovery, preserved fallback quotas, and a concise error when live quotas remain unavailable.
 - A validated installer that backs up the previous installation and preserves settings.
 
-In settings, **Reset display** selects **Clock time** (the default) or **Time remaining**, with compact countdowns such as `◷ 45m`, `◷ 2h 15m`, or `◷ 2d 3h`. This affects exhausted quotas in the panel only.
+In settings, **Reset display** selects **Clock time** (the default) or **Time remaining**, with compact countdowns such as `◷ 45m`, `◷ 2h15m`, or `◷ 2d3h`. This affects exhausted quotas in the panel only.
 
 Reset labels redraw locally once a minute without extra provider requests. When two displayed windows are exhausted, compact mode shows the later reset; if either blocking reset is unknown, it keeps the percentage. After a deadline passes, the percentage returns until a regular provider refresh confirms new quota. Credits and cost budgets continue to use percentages.
 

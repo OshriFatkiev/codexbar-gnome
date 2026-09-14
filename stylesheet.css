@@ -157,8 +157,13 @@
 
 /* One provider: logo plus its window metrics. */
 .codexbar-panel-group {
-    spacing: 4px;
+    spacing: 2px;
     padding: 0 3px;
+}
+
+/* Keep quota windows apart while bringing the provider logo closer. */
+.codexbar-panel-metrics {
+    spacing: 4px;
 }
 
 /* Percentage plus its bar, stacked. */

@@ -1315,8 +1315,14 @@ export default class CodexBarExtension extends Extension {
         style_class: "codexbar-panel-logo",
       });
       const metrics = [this._buildPanelMetric(), this._buildPanelMetric()];
+      const metricsBox = new St.BoxLayout({
+        vertical: false,
+        y_align: Clutter.ActorAlign.CENTER,
+        style_class: "codexbar-panel-metrics",
+      });
       box.add_child(logoBin);
-      metrics.forEach((m) => box.add_child(m.box));
+      metrics.forEach((m) => metricsBox.add_child(m.box));
+      box.add_child(metricsBox);
 
       this._panelGroups.push({ box, logoBin, metrics });
       this._panelBox.add_child(box);

@@ -28,9 +28,16 @@ const extension = new Extension();
 let clockFormat = "24h";
 extension._clockSettings = { get_string: () => clockFormat };
 let resetDisplay = "absolute";
+let panelProviders = "active";
+let displayMode = "remaining";
+let showLogo = true;
 const settings = {
-  get_string: (key) => key === "panel-reset-display" ? resetDisplay : "remaining",
-  get_boolean: () => false,
+  get_string: (key) => ({
+    "panel-reset-display": resetDisplay,
+    "panel-providers": panelProviders,
+    "display-mode": displayMode,
+  })[key],
+  get_boolean: (key) => key === "panel-show-logo" && showLogo,
   disconnectObject() {},
 };
 extension._settings = settings;
@@ -97,7 +104,7 @@ for (const mode of ["remaining", "used"]) {
   equal(compact[0].percent, mode === "remaining" ? 0 : 100, "Progress remains the real percentage");
   const expanded = extension._panelWindows(exhausted, mode, 2, now);
   equal(expanded.map((w) => extension._panelMetricText(w, now, "en-US")),
-    ["◷ 14:30", "◷ Fri 14:30"], "Expanded mode shows each window's own reset");
+    ["14:30", "Fri 14:30"], "Expanded mode shows each window's own reset");
   for (const missing of [undefined, NaN, Infinity, now - 1000]) {
     const unknown = extension._panelWindows(
       data(window(100, 18000, today), window(100, 604800, missing)), mode, 1, now);
@@ -111,23 +118,23 @@ for (const mode of ["remaining", "used"]) {
 const metric = { label: "5h", used: 100, percent: 0, resetAtMs: today };
 equal(extension._panelMetricText(metric, today, "en-US"), "5h 0%", "Elapsed resets revert to percentage");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2026, 8, 14, 14, 30).getTime() }, now, "en-US"),
-  "◷ Mon 14:30", "The sixth future calendar day uses a weekday");
+  "Mon 14:30", "The sixth future calendar day uses a weekday");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2026, 8, 15, 14, 30).getTime() }, now, "en-US"),
-  "◷ Sep 15 14:30", "More distant resets include a month and date");
+  "Sep 15 14:30", "More distant resets include a month and date");
 clockFormat = "12h";
-equal(extension._panelMetricText(metric, now, "en-US"), "◷ 2:30 PM", "Desktop 12-hour preference is honored");
+equal(extension._panelMetricText(metric, now, "en-US"), "2:30 PM", "Desktop 12-hour preference is honored");
 clockFormat = "24h";
 const midnight = new Date(2026, 8, 9, 0, 0).getTime();
 const tomorrow = { ...metric, resetAtMs: midnight + 1800000 };
-equal(extension._panelMetricText(tomorrow, midnight - 60000, "en-US"), "◷ Wed 00:30",
+equal(extension._panelMetricText(tomorrow, midnight - 60000, "en-US"), "Wed 00:30",
   "Tomorrow is based on the local calendar");
-equal(extension._panelMetricText(tomorrow, midnight, "en-US"), "◷ 00:30",
+equal(extension._panelMetricText(tomorrow, midnight, "en-US"), "00:30",
   "The weekday disappears at local midnight");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2026, 10, 1, 14, 30).getTime() },
-  new Date(2026, 9, 26, 14, 30).getTime(), "en-US"), "◷ Sun 14:30",
+  new Date(2026, 9, 26, 14, 30).getTime(), "en-US"), "Sun 14:30",
   "Six calendar days still use a weekday across the autumn DST change");
 equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2027, 0, 1, 0, 30).getTime() },
-  new Date(2026, 11, 31, 23, 30).getTime(), "en-US"), "◷ Fri 00:30",
+  new Date(2026, 11, 31, 23, 30).getTime(), "en-US"), "Fri 00:30",
   "Tomorrow's weekday also works across a year boundary");
 console.log("PASS: exhaustion, blocking resets, clock format, and calendar boundaries");
 
@@ -140,21 +147,21 @@ for (const [seconds, expected] of [
   [90000, "1d1h"], [172800, "2d"], [184500, "2d3h"],
 ]) {
   equal(extension._panelMetricText({ ...metric, resetAtMs: now + seconds * 1000 }, now),
-    `◷ ${expected}`, `Countdown rounds and formats ${seconds} seconds`);
+    expected, `Countdown rounds and formats ${seconds} seconds`);
 }
 clockFormat = "12h";
-equal(extension._panelMetricText(metric, now), "◷ 2h30m", "Countdown ignores desktop clock format");
+equal(extension._panelMetricText(metric, now), "2h30m", "Countdown ignores desktop clock format");
 clockFormat = "24h";
 for (const mode of ["remaining", "used"]) {
   for (const limit of [1, 2]) {
     const windows = extension._panelWindows(exhausted, mode, limit, now);
     equal(windows.map((w) => extension._panelMetricText(w, now)),
-      limit === 1 ? ["◷ 3d2h"] : ["◷ 2h30m", "◷ 3d2h"],
+      limit === 1 ? ["3d2h"] : ["2h30m", "3d2h"],
       "Countdown preserves compact and expanded exhausted window selection");
     const mixed = extension._panelWindows(
       data(window(50, 18000, today), window(100, 604800, friday)), mode, limit, now);
     equal(mixed.map((w) => extension._panelMetricText(w, now)),
-      limit === 1 ? ["◷ 3d2h"] : ["5h 50%", "◷ 3d2h"],
+      limit === 1 ? ["3d2h"] : ["5h 50%", "3d2h"],
       "Only the exhausted window switches to a countdown");
   }
 }
@@ -165,7 +172,7 @@ for (const resetAtMs of [undefined, NaN, Infinity, now, now - 1]) {
 equal(extension._panelMetricText({ ...metric, used: 99.6 }, now), "5h 0%",
   "Countdown requires real exhaustion, not rounded exhaustion");
 resetDisplay = "absolute";
-equal(extension._panelMetricText(metric, now, "en-US"), "◷ 14:30",
+equal(extension._panelMetricText(metric, now, "en-US"), "14:30",
   "Switching back restores the clock time");
 console.log("PASS: countdown formatting, boundaries, and window selection");
 
@@ -173,30 +180,41 @@ console.log("PASS: countdown formatting, boundaries, and window selection");
 const realDateNow = Date.now;
 let renderNow = now;
 Date.now = () => renderNow;
-const actor = () => ({ visible: false, destroy() {} });
+const actor = () => ({
+  visible: false, opacity: 255, destroy() {},
+  set_child(child) { this.child = child; },
+});
 const label = () => ({ text: "", get_text() { return this.text; }, set_text(text) { this.text = text; } });
+const panelMetric = () => ({ box: actor(), label: label() });
+const panelGroup = () => ({
+  box: actor(), logoId: null, logoBin: actor(), metrics: [panelMetric(), panelMetric()],
+});
 extension._providers = [{ name: "Example" }];
 extension._activeProviderIndex = 0;
 extension._providersData = [data(window(100, 18000, Date.now() + 3600000))];
-const renderedMetric = { box: actor(), label: label() };
-extension._panelGroups = [{ box: actor(), logoId: null, logoBin: actor(), metrics: [renderedMetric] }];
+extension._panelGroups = [panelGroup(), panelGroup()];
+const renderedMetric = extension._panelGroups[0].metrics[0];
+const logoBin = extension._panelGroups[0].logoBin;
+extension._getProviderLogo = (id) => id === "missing" ? null : actor();
 extension._ensurePanelGroups = () => {};
 extension._syncTrackWidths = () => {};
-extension._applyMetricFill = (m) => equal(m.percent, 0, "Exhausted remaining progress stays empty");
+extension._applyMetricFill = (m) => { m.renderedPercent = m.percent; };
 extension._refreshData = () => { throw new Error("Label redraw must never fetch usage"); };
 extension._updatePanel("remaining");
-equal(renderedMetric.label.text.startsWith("◷ "), true, "The actual actor receives the reset label");
+equal(renderedMetric.label.text, "13:00", "The actual actor receives a plain clock time");
+equal(renderedMetric.renderedPercent, 0, "Exhausted remaining progress stays empty");
+equal(logoBin.opacity, 153, "Exhaustion dims the provider logo to 60 percent");
 equal(timers.size, 1, "Visible reset labels start one timer");
 extension._updatePanel("remaining");
 equal(timers.size, 1, "Repeated rendering does not duplicate timers");
 resetDisplay = "remaining";
 extension._updatePanel("remaining");
-equal(renderedMetric.label.text, "◷ 1h", "Changing the preference redraws cached quota immediately");
+equal(renderedMetric.label.text, "1h", "Changing the preference redraws cached quota immediately");
 const [countdownTimerId, countdownCallback] = [...timers.entries()][0];
 timers.delete(countdownTimerId);
 renderNow += 60000;
 countdownCallback();
-equal(renderedMetric.label.text, "◷ 59m", "The local minute timer advances the countdown");
+equal(renderedMetric.label.text, "59m", "The local minute timer advances the countdown");
 equal(timers.size, 1, "Countdown ticking maintains exactly one timer");
 resetDisplay = "absolute";
 extension._updatePanel("remaining");
@@ -208,14 +226,89 @@ timers.delete(timerId);
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() - 1000;
 equal(callback(), scheduler.SOURCE_REMOVE, "The minute callback is a one-shot local redraw");
 equal(renderedMetric.label.text, "5h 0%", "The timer removes an expired reset label");
+equal(logoBin.opacity, 153, "A passed deadline does not confirm quota recovery");
 equal(timers.size, 0, "No timer remains when no reset labels are visible");
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() + 3600000;
 extension._updatePanel("remaining");
 extension._providersData = [];
 extension._updatePanel("remaining");
 equal(timers.size, 0, "Unavailable data also removes the reset timer");
+equal(logoBin.opacity, 255, "Unavailable data clears the previous exhaustion dimming");
+
+const states = [
+  ["exhausted", data(window(100, 18000, today)), 153],
+  ["recovered", data(window(50, 18000, today)), 255],
+  ["exhausted again", data(window(100, 18000, today)), 153],
+  ["rounded to zero remaining", data(window(99.6, 18000, today)), 255],
+  ["unknown reset", data(window(100, 18000)), 153],
+  ["invalid reset", data(window(100, 18000, NaN)), 153],
+  ["elapsed reset", data(window(100, 18000, now - 1)), 153],
+  ["unavailable", undefined, 255],
+  ["exhausted credits", { data: { usage: { details: [{ title: "API key", rows: [
+    { label: "API key budget", value: "$5.00" },
+    { label: "API key remaining", value: "$0.00" },
+  ] }] } } }, 255],
+  ["exhausted budget", { data: { usage: { providerCost: { used: 10, limit: 10 } } } }, 255],
+];
+for (const mode of ["remaining", "used"]) {
+  displayMode = mode;
+  for (const [name, providerData, opacity] of states) {
+    extension._providersData = [providerData];
+    extension._updatePanel(mode);
+    equal(logoBin.opacity, opacity, `${name} updates the reused logo in ${mode} mode`);
+  }
+}
+displayMode = "remaining";
+
+const alpha = { id: "alpha", name: "Alpha" };
+const beta = { id: "beta", name: "Beta" };
+const healthy = data(window(50, 18000, today));
+extension._providers = [alpha, beta];
+for (const layout of ["active", "all"]) {
+  panelProviders = layout;
+  for (const [primaryUsed, secondaryUsed] of [[100, 50], [50, 100]]) {
+    extension._providersData = [
+      data(window(primaryUsed, 18000, today), window(secondaryUsed, 604800, friday)),
+      healthy,
+    ];
+    extension._updatePanel("remaining");
+    equal(logoBin.opacity, 153, `Either exhausted window dims the shared logo in ${layout} mode`);
+    equal(extension._panelGroups[0].metrics[1].box.visible, layout === "active",
+      "Expanded and compact window layouts are preserved");
+  }
+}
+extension._providers = [beta, alpha];
+extension._providersData.reverse();
+extension._updatePanel("remaining");
+equal(extension._panelGroups.map((group) => group.logoBin.opacity), [255, 153],
+  "Reordering providers does not attach dimming to the wrong logo");
+panelProviders = "active";
+for (const index of [1, 0, 1]) {
+  extension._activeProviderIndex = index;
+  extension._updatePanel("remaining");
+  equal(logoBin.opacity, index === 1 ? 153 : 255,
+    "Switching the active provider recomputes the shared actor's opacity");
+}
+
+extension._activeProviderIndex = 0;
+extension._providersData = [data(window(100, 18000, today))];
+for (const [format, expected] of [["absolute", "14:30"], ["remaining", "2h29m"]]) {
+  resetDisplay = format;
+  for (const [provider, visible] of [[alpha, false], [{ id: "missing", name: "Custom" }, true]]) {
+    showLogo = visible;
+    extension._providers = [provider];
+    extension._updatePanel("remaining");
+    equal(logoBin.visible, false, "Disabled or missing provider logos stay hidden");
+    equal(renderedMetric.label.text, expected, "Reset text stays plain without a visible logo");
+  }
+}
+console.log("PASS: logo exhaustion, recovery, provider changes, and hidden-logo reset text");
+
+showLogo = true;
+extension._providers = [alpha];
 extension._providersData = [data(window(100, 18000, Date.now() + 3600000))];
 extension._updatePanel("remaining");
+equal(timers.size, 1, "A visible countdown has one timer before disable");
 let disconnected = false;
 extension._clockSettings.disconnectObject = () => { disconnected = true; };
 extension.disable();

@@ -43,6 +43,9 @@ function setVisible(actor, visible) {
 // stylesheets — an extension with a single stylesheet cannot.
 const SECONDARY_TEXT_OPACITY = 200;
 
+// Exhausted time quotas dim only the provider logo to 60% opacity.
+const PANEL_EXHAUSTED_LOGO_OPACITY = 153;
+
 // When the panel collapses a provider to one window it shows the shortest one,
 // unless a longer window has reached this much usage - at which point it is
 // close enough to exhaustion to be worth taking the slot.
@@ -1342,15 +1345,15 @@ export default class CodexBarExtension extends Extension {
     if (this._settings.get_string("panel-reset-display") === "remaining") {
       // Round up so a future reset never reads as zero minutes remaining.
       const totalMinutes = Math.ceil((win.resetAtMs - nowMs) / 60000);
-      if (totalMinutes < 60) return `◷ ${totalMinutes}m`;
+      if (totalMinutes < 60) return `${totalMinutes}m`;
       const totalHours = Math.floor(totalMinutes / 60);
       if (totalHours < 24) {
         const minutes = totalMinutes % 60;
-        return `◷ ${totalHours}h${minutes ? `${minutes}m` : ""}`;
+        return `${totalHours}h${minutes ? `${minutes}m` : ""}`;
       }
       const days = Math.floor(totalHours / 24);
       const hours = totalHours % 24;
-      return `◷ ${days}d${hours ? `${hours}h` : ""}`;
+      return `${days}d${hours ? `${hours}h` : ""}`;
     }
 
     const reset = new Date(win.resetAtMs);
@@ -1365,7 +1368,7 @@ export default class CodexBarExtension extends Extension {
     });
     const date = daysAhead === 0 ? "" : reset.toLocaleDateString(locale,
       daysAhead <= 6 ? { weekday: "short" } : { month: "short", day: "numeric" });
-    return `◷ ${date ? `${date} ` : ""}${time}`;
+    return `${date ? `${date} ` : ""}${time}`;
   }
 
   _stopPanelResetTimer() {
@@ -1413,6 +1416,11 @@ export default class CodexBarExtension extends Extension {
       if (logo) group.logoBin.set_child(logo);
       setVisible(group.logoBin, !!logo);
     }
+
+    // Reused groups must recover their brightness when quotas or providers change.
+    // A missing or elapsed reset does not establish that quota is available again.
+    const exhausted = entry.windows.some((win) => win.windowSeconds > 0 && win.used >= 100);
+    group.logoBin.opacity = exhausted ? PANEL_EXHAUSTED_LOGO_OPACITY : 255;
 
     group.metrics.forEach((metric, i) => {
       const win = entry.windows[i];

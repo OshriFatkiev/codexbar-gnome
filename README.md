@@ -8,15 +8,17 @@ The extension is still named **CodexBar**. This fork is maintained independently
 
 - Separate provider logos and quota bars, equal bar widths, and compact spacing. Show all providers or the selected provider’s windows.
 - Remaining or used quota display, with an exhausted window kept visible even when another window has quota left.
-- Local reset times such as `◷ 14:30`, `◷ Fri 14:30`, or `◷ Sep 15 14:30` when a limit is fully exhausted. The desktop’s 12/24-hour preference is respected.
+- Local reset times such as `14:30`, `Fri 14:30`, or `Sep 15 14:30` when a limit is fully exhausted, with the provider logo dimmed to 60% opacity. The desktop’s 12/24-hour preference is respected.
 - Reorderable providers, collapsed provider settings, and provider-specific connection choices that preserve custom commands and visibly flag unsupported saved choices.
 - Refresh handling that keeps results attached to the correct provider when settings change. Structured CLI responses avoid a second call for label discovery.
 - Antigravity offline recovery, preserved fallback quotas, and a concise error when live quotas remain unavailable.
 - A validated installer that backs up the previous installation and preserves settings.
 
-In settings, **Reset display** selects **Clock time** (the default) or **Time remaining**, with compact countdowns such as `◷ 45m`, `◷ 2h15m`, or `◷ 2d3h`. This affects exhausted quotas in the panel only.
+In settings, **Reset display** selects **Clock time** (the default) or **Time remaining**, with compact countdowns such as `45m`, `2h15m`, or `2d3h`. This affects exhausted quotas in the panel only. Reset text has no clock symbol, including when logos are hidden or unavailable.
 
 Reset labels redraw locally once a minute without extra provider requests. When two displayed windows are exhausted, compact mode shows the later reset; if either blocking reset is unknown, it keeps the percentage. After a deadline passes, the percentage returns until a regular provider refresh confirms new quota. Credits and cost budgets continue to use percentages.
+
+The logo dims when either displayed time-based quota is fully exhausted, even if its reset time is unknown or has passed. It returns to full brightness when quota data shows availability; a provider with unavailable data also uses a full-brightness logo. A remaining quota that merely rounds to `0%` does not trigger dimming. Text, bars, and credit or budget displays retain their existing brightness.
 
 ## Install this fork
 

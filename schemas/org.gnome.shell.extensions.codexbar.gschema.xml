@@ -10,7 +10,16 @@
     <value nick="all" value="1"/>
   </enum>
 
+  <enum id="org.gnome.shell.extensions.codexbar.PanelResetDisplay">
+    <value nick="absolute" value="0"/>
+    <value nick="remaining" value="1"/>
+  </enum>
+
   <schema id="org.gnome.shell.extensions.codexbar" path="/org/gnome/shell/extensions/codexbar/">
+    <key name="panel-reset-display" enum="org.gnome.shell.extensions.codexbar.PanelResetDisplay">
+      <default>'absolute'</default>
+      <summary>Show exhausted quota resets as clock time or time remaining in the panel</summary>
+    </key>
     <key name="refresh-interval" type="i">
       <default>15</default>
       <summary>Refresh interval in minutes</summary>

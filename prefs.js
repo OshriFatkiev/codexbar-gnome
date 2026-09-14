@@ -318,6 +318,22 @@ const CodexBarPrefsPage = GObject.registerClass(
       });
       group.add(displayModeRow);
 
+      const resetDisplayRow = new Adw.ComboRow({
+        title: _("Reset display"),
+        subtitle: _("How exhausted quota resets appear in the panel"),
+        model: new Gtk.StringList({
+          strings: [_("Clock time"), _("Time remaining")],
+        }),
+        selected: this._settings.get_string("panel-reset-display") === "remaining" ? 1 : 0,
+      });
+      resetDisplayRow.connect("notify::selected", () => {
+        this._settings.set_string(
+          "panel-reset-display",
+          resetDisplayRow.selected === 1 ? "remaining" : "absolute",
+        );
+      });
+      group.add(resetDisplayRow);
+
       const panelProvidersRow = new Adw.ComboRow({
         title: _("Providers in Panel"),
         subtitle: _(

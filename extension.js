@@ -208,6 +208,7 @@ export default class CodexBarExtension extends Extension {
       "changed::show-logos", () => this._updateUI(),
       "changed::panel-show-logo", () => this._updateUI(),
       "changed::panel-providers", () => this._updateUI(),
+      "changed::panel-reset-display", () => this._updatePanel(this._settings.get_string("display-mode")),
       "changed::show-pacing-info", () => this._updateUI(),
       "changed::show-provider-details", () => this._updateUI(),
       "changed::first-run", () => this._updateUI(),
@@ -1337,6 +1338,20 @@ export default class CodexBarExtension extends Extension {
   _panelMetricText(win, nowMs = Date.now(), locale = undefined) {
     if (!this._hasPanelReset(win, nowMs))
       return `${win.label} ${Math.round(win.percent)}%`;
+
+    if (this._settings.get_string("panel-reset-display") === "remaining") {
+      // Round up so a future reset never reads as zero minutes remaining.
+      const totalMinutes = Math.ceil((win.resetAtMs - nowMs) / 60000);
+      if (totalMinutes < 60) return `◷ ${totalMinutes}m`;
+      const totalHours = Math.floor(totalMinutes / 60);
+      if (totalHours < 24) {
+        const minutes = totalMinutes % 60;
+        return `◷ ${totalHours}h${minutes ? ` ${minutes}m` : ""}`;
+      }
+      const days = Math.floor(totalHours / 24);
+      const hours = totalHours % 24;
+      return `◷ ${days}d${hours ? ` ${hours}h` : ""}`;
+    }
 
     const reset = new Date(win.resetAtMs);
     const now = new Date(nowMs);

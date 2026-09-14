@@ -27,6 +27,13 @@ const Extension = new Function(
 const extension = new Extension();
 let clockFormat = "24h";
 extension._clockSettings = { get_string: () => clockFormat };
+let resetDisplay = "absolute";
+const settings = {
+  get_string: (key) => key === "panel-reset-display" ? resetDisplay : "remaining",
+  get_boolean: () => false,
+  disconnectObject() {},
+};
+extension._settings = settings;
 
 function equal(actual, expected, message) {
   if (JSON.stringify(actual) !== JSON.stringify(expected))
@@ -124,14 +131,52 @@ equal(extension._panelMetricText({ ...metric, resetAtMs: new Date(2027, 0, 1, 0,
   "Tomorrow's weekday also works across a year boundary");
 console.log("PASS: exhaustion, blocking resets, clock format, and calendar boundaries");
 
+resetDisplay = "remaining";
+for (const [seconds, expected] of [
+  [1, "1m"], [59, "1m"], [60, "1m"], [61, "2m"],
+  [2700, "45m"], [3540, "59m"], [3541, "1h"], [3600, "1h"],
+  [3601, "1h 1m"], [8100, "2h 15m"], [86340, "23h 59m"],
+  [86341, "1d"], [86400, "1d"], [86460, "1d"],
+  [90000, "1d 1h"], [172800, "2d"], [184500, "2d 3h"],
+]) {
+  equal(extension._panelMetricText({ ...metric, resetAtMs: now + seconds * 1000 }, now),
+    `◷ ${expected}`, `Countdown rounds and formats ${seconds} seconds`);
+}
+clockFormat = "12h";
+equal(extension._panelMetricText(metric, now), "◷ 2h 30m", "Countdown ignores desktop clock format");
+clockFormat = "24h";
+for (const mode of ["remaining", "used"]) {
+  for (const limit of [1, 2]) {
+    const windows = extension._panelWindows(exhausted, mode, limit, now);
+    equal(windows.map((w) => extension._panelMetricText(w, now)),
+      limit === 1 ? ["◷ 3d 2h"] : ["◷ 2h 30m", "◷ 3d 2h"],
+      "Countdown preserves compact and expanded exhausted window selection");
+    const mixed = extension._panelWindows(
+      data(window(50, 18000, today), window(100, 604800, friday)), mode, limit, now);
+    equal(mixed.map((w) => extension._panelMetricText(w, now)),
+      limit === 1 ? ["◷ 3d 2h"] : ["5h 50%", "◷ 3d 2h"],
+      "Only the exhausted window switches to a countdown");
+  }
+}
+for (const resetAtMs of [undefined, NaN, Infinity, now, now - 1]) {
+  equal(extension._panelMetricText({ ...metric, resetAtMs }, now), "5h 0%",
+    "Countdown falls back to percentage for unknown or elapsed deadlines");
+}
+equal(extension._panelMetricText({ ...metric, used: 99.6 }, now), "5h 0%",
+  "Countdown requires real exhaustion, not rounded exhaustion");
+resetDisplay = "absolute";
+equal(extension._panelMetricText(metric, now, "en-US"), "◷ 14:30",
+  "Switching back restores the clock time");
+console.log("PASS: countdown formatting, boundaries, and window selection");
+
 // Drive the real update/render path and timer callback without fetching or Shell actors.
+const realDateNow = Date.now;
+let renderNow = now;
+Date.now = () => renderNow;
 const actor = () => ({ visible: false, destroy() {} });
 const label = () => ({ text: "", get_text() { return this.text; }, set_text(text) { this.text = text; } });
 extension._providers = [{ name: "Example" }];
 extension._activeProviderIndex = 0;
-extension._settings = {
-  get_string: () => "remaining", get_boolean: () => false, disconnectObject() {},
-};
 extension._providersData = [data(window(100, 18000, Date.now() + 3600000))];
 const renderedMetric = { box: actor(), label: label() };
 extension._panelGroups = [{ box: actor(), logoId: null, logoBin: actor(), metrics: [renderedMetric] }];
@@ -144,6 +189,20 @@ equal(renderedMetric.label.text.startsWith("◷ "), true, "The actual actor rece
 equal(timers.size, 1, "Visible reset labels start one timer");
 extension._updatePanel("remaining");
 equal(timers.size, 1, "Repeated rendering does not duplicate timers");
+resetDisplay = "remaining";
+extension._updatePanel("remaining");
+equal(renderedMetric.label.text, "◷ 1h", "Changing the preference redraws cached quota immediately");
+const [countdownTimerId, countdownCallback] = [...timers.entries()][0];
+timers.delete(countdownTimerId);
+renderNow += 60000;
+countdownCallback();
+equal(renderedMetric.label.text, "◷ 59m", "The local minute timer advances the countdown");
+equal(timers.size, 1, "Countdown ticking maintains exactly one timer");
+resetDisplay = "absolute";
+extension._updatePanel("remaining");
+equal(renderedMetric.label.text, extension._panelMetricText({ ...metric, resetAtMs: now + 3600000 }, renderNow),
+  "Switching back to clock time updates the existing actor");
+resetDisplay = "remaining";
 const [timerId, callback] = [...timers.entries()][0];
 timers.delete(timerId);
 extension._providersData[0].data.usage.primary.resetAtMs = Date.now() - 1000;
@@ -162,4 +221,5 @@ extension._clockSettings.disconnectObject = () => { disconnected = true; };
 extension.disable();
 equal(timers.size, 0, "Disable removes the reset timer");
 equal(disconnected, true, "Disable disconnects desktop clock settings");
+Date.now = realDateNow;
 console.log("PASS: panel rendering and timer lifecycle without provider calls");

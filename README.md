@@ -1,106 +1,97 @@
-# CodexBar for GNOME
+# CodexBar for GNOME — maintained fork
 
-A GNOME Shell extension to monitor AI provider usage metrics directly from the system panel. This extension acts as a graphical interface for the CodexBar CLI, providing real-time visibility into your API quotas and usage tiers.
+This is [OshriFatkiev’s maintained fork](https://github.com/OshriFatkiev/codexbar-gnome) of [InledGroup’s CodexBar GNOME extension](https://github.com/InledGroup/codexbar-gnome). It shows AI provider quotas in the GNOME panel, using the [CodexBar CLI](https://github.com/steipete/CodexBar) for most provider connections and built-in fetchers for direct Codex and Ollama connections.
 
-![CodexBar Panel](<demo.gif>)
+The extension is still named **CodexBar**. This fork is maintained independently; report problems with this version in [this repository’s issues](https://github.com/OshriFatkiev/codexbar-gnome/issues).
 
-## Features
+![CodexBar panel with provider logos, remaining quota percentages, and usage bars](media/panel-preview.png)
 
-- Real-time monitoring of AI provider usage (Gemini, OpenAI, etc).
-- Support for standard Codex and Codex Spark 5-hour/weekly usage tiers
-- Toggle between Remaining Quota and Used Quota display modes.
-- Show local reset times for exhausted limits, using the desktop's 12/24-hour clock preference.
-- Automatic background refreshes with configurable intervals.
-- Visual warnings (color changes) when reaching quota limits.
-- Automatic resolution of CodexBar CLI paths (Homebrew supported).
-- Calculate and display weekly usage pace from the existing quota window
-- Render Code review usage when the Linux API supplies it
-- Add regression coverage for the new normalization and pace calculation
-- Added support to show AI economic expenditure
+## What this fork adds
 
-When a limit is fully exhausted, its panel label becomes `◷ 14:30` for a reset
-today, `◷ Fri 14:30` within the next six calendar days, or `◷ Sep 15 14:30`
-further ahead. In the compact view, two exhausted windows show the later reset.
-If a blocking window has no known future reset, the percentage stays visible.
-Reset labels redraw locally once a minute without extra provider requests; after
-the deadline, the percentage returns until a regular refresh confirms new quota.
+- Separate provider logos and quota bars, equal bar widths, and compact spacing. Show all providers or the selected provider’s windows.
+- Remaining or used quota display, with an exhausted window kept visible even when another window has quota left.
+- Local reset times such as `◷ 14:30`, `◷ Fri 14:30`, or `◷ Sep 15 14:30` when a limit is fully exhausted. The desktop’s 12/24-hour preference is respected.
+- Reorderable providers, collapsed provider settings, and provider-specific connection choices that preserve custom commands and visibly flag unsupported saved choices.
+- Refresh handling that keeps results attached to the correct provider when settings change. Structured CLI responses avoid a second call for label discovery.
+- Antigravity offline recovery, preserved fallback quotas, and a concise error when live quotas remain unavailable.
+- A validated installer that backs up the previous installation and preserves settings.
 
-## Updates  
-- Support Codex Spark usage tiers from the direct ChatGPT endpoint (`additional_rate_limits`)
-- Render provider-supplied detail sections (OpenRouter credits, API key budget, spend history) with a new `show-provider-details` toggle
-- Derive a meaningful usage percent for balance-based providers (e.g. OpenRouter) from the Credits / API key sections
-- Welcome screen now installs the cookie importer and SSL helper scripts directly from the repo (raw GitHub) instead of PyPI
+Reset labels redraw locally once a minute without extra provider requests. When two displayed windows are exhausted, compact mode shows the later reset; if either blocking reset is unknown, it keeps the percentage. After a deadline passes, the percentage returns until a regular provider refresh confirms new quota. Credits and cost budgets continue to use percentages.
 
-## Requirements
+## Install this fork
 
-The extension requires the CodexBar CLI tool installed on your system.
+**`main` is the recommended branch to install.** `integration` contains combined changes awaiting verification. Individual feature branches may contain experiments.
 
-### Install CodexBar CLI
+You need an existing GNOME Shell desktop and these commands: `git`, `gnome-extensions`, `glib-compile-schemas`, and `unzip`. This fork has been tested locally on **GNOME Shell 46.0**. Metadata declares compatibility with Shell 45–51; that is not a claim that every declared version has been tested here.
 
-It is recommended to install the CLI via Homebrew, which is the official way:
+Run in a terminal inside your desktop session, without `sudo`:
+
+```bash
+git clone --branch main https://github.com/OshriFatkiev/codexbar-gnome.git &&
+cd codexbar-gnome &&
+./install.sh
+```
+
+Then load the new code:
+
+- **X11:** press **Alt+F2**, type **`r`**, and press **Enter**.
+- **Wayland:** log out and log back in.
+
+The installer builds and checks a fresh ZIP before replacing the extension. It saves the previous files under `${XDG_STATE_HOME:-~/.local/state}/codexbar/install-backups/` and prints the exact backup path. If replacement fails, it restores those files and preserves the partial installation for diagnosis. If enabling fails, the new files remain installed; follow the printed reload and enable instructions.
+
+### Existing installations and updates
+
+From your existing checkout, including one previously installed from `integration`:
+
+```bash
+git switch main &&
+git pull --ff-only origin main &&
+./install.sh
+```
+
+Reload the session as described above. Your provider configuration and credentials are preserved; there is no need to configure providers again. If Git reports local changes or divergent history, resolve that before rerunning the update instead of discarding work.
+
+This fork deliberately retains UUID `codexbar@inled.es` and the existing settings schema. It **replaces the upstream extension in the same installation slot**; the two versions cannot be enabled side by side. The [GNOME Extensions store listing](https://extensions.gnome.org/extension/9841/codexbar/) distributes the upstream version, not this fork. Use this checkout’s installer for fork updates.
+
+### CodexBar CLI and optional helpers
+
+Install the [CodexBar CLI](https://github.com/steipete/CodexBar) for CLI-backed connections, including the CLI’s OAuth sources. This transition does not remove that dependency or change provider authentication. The current onboarding still prompts for the CLI; direct Codex and Ollama fetchers are also available.
+
+If you use Homebrew:
 
 ```bash
 brew install steipete/tap/codexbar
 ```
-Homebrew exists for Linux (and is a good package manager). For those who don't know, it can be installed with
-```bash
-/bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
-```
 
-### Install Cookie Importer (only for Codex users)
-It is now distributed separately from the extension and no longer requires PyPI. Download it directly from the repo into `~/.local/bin` (the extension looks there by default):
-```bash
-mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/InledGroup/codexbar-gnome/main/scripts/codexbar-cookie-importer -o ~/.local/bin/codexbar-cookie-importer && chmod +x ~/.local/bin/codexbar-cookie-importer
-```
-It is a dependency-free bash script (uses `secret-tool`, `openssl`, `sqlite3`).
+Otherwise, follow the CLI project’s [installation documentation](https://github.com/steipete/CodexBar#readme) and [release downloads](https://github.com/steipete/CodexBar/releases). The extension looks for `codexbar` in common locations; you can also configure an absolute command path.
 
-### Install helper to Trust the Certificate of the Antigravity Language Server (only for Antigravity users)
-This minimal script is invoked by the extension when you click on the trust antigravity cert button and what it does is save the certificate in the system trust store, elevating privileges.   
-Since it elevates privileges, it would be unreasonable to integrate the elevation logic into the extension (as JustPerfection told me) so it is served as a standalone script that the user must decide to install, thus complying with GJS guidelines. It is now a dependency-free bash script (no PyPI):
+The optional helpers below come from this fork’s `main` and retain their upstream behavior. They are not required for every connection mode.
+
+**Cookie importer:** for extracting browser cookies for the direct Codex connection. It uses `secret-tool`, `openssl`, and `sqlite3` and does not require PyPI.
 
 ```bash
-mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/InledGroup/codexbar-gnome/main/scripts/codexbar-ssl-helper -o ~/.local/bin/codexbar-ssl-helper && chmod +x ~/.local/bin/codexbar-ssl-helper && codexbar-ssl-helper
+mkdir -p ~/.local/bin &&
+curl -fsSL https://raw.githubusercontent.com/OshriFatkiev/codexbar-gnome/main/scripts/codexbar-cookie-importer -o ~/.local/bin/codexbar-cookie-importer &&
+chmod +x ~/.local/bin/codexbar-cookie-importer
 ```
 
+**Antigravity certificate helper:** for connections that need to trust the local Antigravity server certificate. Running it changes system certificate trust and requests elevated privileges. Install it with:
 
-## Installation
+```bash
+mkdir -p ~/.local/bin &&
+curl -fsSL https://raw.githubusercontent.com/OshriFatkiev/codexbar-gnome/main/scripts/codexbar-ssl-helper -o ~/.local/bin/codexbar-ssl-helper &&
+chmod +x ~/.local/bin/codexbar-ssl-helper
+```
 
-### From EGO
-Reviewed by the great GNOME experts, with the confidence of correct operation and stability.
-[https://extensions.gnome.org/extension/9841/codexbar/](https://extensions.gnome.org/extension/9841/codexbar/)
+When this trust setup is needed, run `codexbar-ssl-helper` and follow its prompts.
 
-### From Github  
-1. Clone or fork the repo
-2. Ensure `gnome-extensions`, `glib-compile-schemas`, and `unzip` are installed.
-3. Run `./install.sh` from the checkout, or invoke it by its full path from another directory.
-4. - On Wayland:
-      - Log out and log in
-      - **For fast development and iteration**: Run `dbus-run-session gnome-shell --wayland --devkit`. You need to have installed Mutter Devkit
-   - On X11: `Alt+F2` and type `r` and press enter.
+## Configuration and troubleshooting
 
-The installer builds and checks a fresh ZIP before replacing the extension.
-Existing provider settings are preserved. Before an upgrade, it saves the
-installed files under `${XDG_STATE_HOME:-~/.local/state}/codexbar/install-backups/`
-and prints the exact backup path. If replacement fails, it restores those files
-and keeps any partial replacement beside the backup for diagnosis.
-
-An enable failure returns a nonzero exit status but leaves the successfully
-installed files in place. Follow the printed instructions to log out and back
-in, then enable the extension. A successful upgrade still needs the session
-reload described above to run the new code. To build a ZIP without installing,
-run `./build.sh`.
-
-### From Unofficial Gnome Shell Store
-I am working on a very interesting concept to present, which is the automated review of extensions with AI. 
-The package is not updated very regularly, the site is still a concept, but it can be tested [https://extensions-gnome.github.io/?ext=codexbar%40inled.es](https://extensions-gnome.github.io/?ext=codexbar%40inled.es)
-
-## Configuration
-
-Access the settings through the gear icon in the extension menu or using your extension manager client.
+Open the extension’s preferences to select providers, connection modes, display mode, and refresh interval. Provider-specific notes follow.
 
 ### Provider Commands
 
-Each provider must be configured with a command that returns JSON output.
+For CLI connections, the provider command must return JSON output. Direct API connections use the extension’s built-in fetchers.
 
 Structured quota responses use a single CLI call per refresh when their labels
 can be derived from JSON. Legacy responses still use a second text-mode call
@@ -146,7 +137,7 @@ you explicitly select a supported replacement. Custom commands are preserved.
 
 The extension will automatically attempt to locate the `codexbar` binary in common locations such as `/home/linuxbrew/.linuxbrew/bin/` if an absolute path is not provided. 
 
-Certain vendors have specific fields in Codexbar CLI, whose interpretation may not have been implemented so this is a great opportunity for you to implement support (if you want) and do a PR.
+If a provider returns usage that this fork does not display correctly, report it in [this repository’s issues](https://github.com/OshriFatkiev/codexbar-gnome/issues). Remove credentials and account details from any diagnostic output you share.
 
 ### API Keys (e.g. OpenRouter)
 
@@ -166,10 +157,23 @@ Then log out and log back in. `environment.d` files are only read once, when you
 systemctl --user import-environment OPENROUTER_API_KEY
 ```
 
-You can confirm GNOME Shell actually has the variable with:
+Check whether the running GNOME Shell received the variable without printing its value:
 
 ```bash
-tr '\0' '\n' < /proc/$(pgrep -x gnome-shell)/environ | grep OPENROUTER_API_KEY
+python3 - <<'PY_CHECK'
+import os
+from pathlib import Path
+import subprocess
+
+pids = subprocess.check_output(
+    ["pgrep", "-u", str(os.getuid()), "-x", "gnome-shell"], text=True
+).split()
+for pid in pids:
+    entries = Path(f"/proc/{pid}/environ").read_bytes().split(b"\0")
+    present = any(entry.startswith(b"OPENROUTER_API_KEY=") and
+                  entry != b"OPENROUTER_API_KEY=" for entry in entries)
+    print(f"GNOME Shell {pid}: API key {'present' if present else 'missing'}")
+PY_CHECK
 ```
 
 Without it, `codexbar --provider openrouter --source api` still returns valid JSON, but with a top-level `error` field and no `usage.details` — so the OpenRouter tab shows only a bare, empty tier instead of the Credits / API key / Spend history breakdown.
@@ -180,27 +184,14 @@ You can choose how metrics are displayed:
 - **Remaining**: Shows the percentage of quota left (default).
 - **Used**: Shows the percentage of quota consumed.
 
+## Support and contributions
 
-## Join the Community
+Use [GitHub Issues](https://github.com/OshriFatkiev/codexbar-gnome/issues) for this fork’s bugs and suggestions, and [pull requests](https://github.com/OshriFatkiev/codexbar-gnome/pulls) for contributions. Include your GNOME Shell version, connection mode, and steps to reproduce. Never post tokens, cookies, API keys, or unredacted account data.
 
-Follow us on social media for updates, discussions, and support:
+See [CONTRIBUTING.md](CONTRIBUTING.md) for the branch workflow and local checks. `main` is the recommended version, `integration` is the verification branch, and useful upstream changes are incorporated through reviewed changes rather than automatic replacement of this fork.
 
-- **Discord**: [Join our Discord server](https://discord.com/invite/PSeTkDMnr)
-- **Matrix**: [Join the Matrix server](https://matrix.inled.es)
-- **Mastodon**: [@inled on mastodon.social](https://mastodon.social/@inled)
-- **YouTube**: [Inled Group YouTube Channel](https://www.youtube.com/@inledgroup)
-- **X (Twitter)**: [@inledgroup on X](https://x.com/inledgroup)
+## Credits and license
 
-## License
+Based on [InledGroup/codexbar-gnome](https://github.com/InledGroup/codexbar-gnome), with thanks to its creator and contributors. Provider fetching also builds on [steipete/CodexBar](https://github.com/steipete/CodexBar). Upstream project links are provided for attribution and upstream documentation; they are not support channels for this fork.
 
-This project is licensed under the terms of the MIT license. Contributions are welcome! 
-
-> [!WARNING]
-> If you base your code on ours or remix it using AI, you must credit the original repository out of respect for the contributors and the creator.
-
-## About:  
-I've been working on a lot of projects lately and wasn't sure if people really cared about them until this one completely brought back my excitement for development and showed me how useful it can be for users. The GNOME community is fantastic.
-
-> [!NOTE]
-> **AI DISCLAIMER**
-> AI has been used on this project. ALL THE CODE that AI made has been reviewed and edited by humans (you can see the difference between ai comments and human-made comments XD)
+Distributed under the [MIT license](LICENSE.md). The original license and notices are retained.

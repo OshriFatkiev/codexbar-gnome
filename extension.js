@@ -1739,7 +1739,7 @@ export default class CodexBarExtension extends Extension {
     if (!importerExists) {
       dep2Box.add_child(
         this._createCommandWithCopyButton(
-          "mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/InledGroup/codexbar-gnome/main/scripts/codexbar-cookie-importer -o ~/.local/bin/codexbar-cookie-importer && chmod +x ~/.local/bin/codexbar-cookie-importer",
+          "mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/OshriFatkiev/codexbar-gnome/main/scripts/codexbar-cookie-importer -o ~/.local/bin/codexbar-cookie-importer && chmod +x ~/.local/bin/codexbar-cookie-importer",
         ),
       );
     }
@@ -1787,7 +1787,7 @@ export default class CodexBarExtension extends Extension {
     if (!certInstalled) {
       dep3Box.add_child(
         this._createCommandWithCopyButton(
-          "mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/InledGroup/codexbar-gnome/main/scripts/codexbar-ssl-helper -o ~/.local/bin/codexbar-ssl-helper && chmod +x ~/.local/bin/codexbar-ssl-helper && codexbar-ssl-helper",
+          "mkdir -p ~/.local/bin && curl -fsSL https://raw.githubusercontent.com/OshriFatkiev/codexbar-gnome/main/scripts/codexbar-ssl-helper -o ~/.local/bin/codexbar-ssl-helper && chmod +x ~/.local/bin/codexbar-ssl-helper && codexbar-ssl-helper",
         ),
       );
     }
@@ -1802,22 +1802,6 @@ export default class CodexBarExtension extends Extension {
       style: "margin-top: 10px;",
       x_align: Clutter.ActorAlign.CENTER,
     });
-
-    // Tengo que actualizar la maldita documentación. La pasaré a una WIKI de GH.
-
-   /* let docBtn = new St.Button({
-      label: _("Documentation"),
-      style_class: "codexbar-tab",
-      style: "margin-right: 10px;",
-    });
-    docBtn.connect("clicked", () => {
-      Gio.AppInfo.launch_default_for_uri(
-        "https://help.inled.es/help/codexbar-gnome",
-        null,
-      );
-    });
-    btnBox.add_child(docBtn);
-    */
 
     let closeBtn = new St.Button({
       label: _("Get Started!"),

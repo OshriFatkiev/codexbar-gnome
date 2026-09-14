@@ -236,171 +236,44 @@ const CodexBarPrefsPage = GObject.registerClass(
      */
     _buildContributeGroup() {
       const group = new Adw.PreferencesGroup({
-        title: _("Contribute & Contact"),
-        description: _(
-          "Enjoy the community of Codexbar contributors and other Inled projects. We are waiting for you!",
-        ),
+        title: _("Support & Contributions"),
+        description: _("Support and development for OshriFatkiev's maintained fork of CodexBar."),
       });
-
-      // Pull Request / Contribute
-      const prRow = new Adw.ActionRow({
-        title: _("Add a New Provider"),
-        subtitle: _(
-          "Help the community by submitting a Pull Request on GitHub",
-        ),
-      });
-      prRow.add_prefix(new Gtk.Image({ icon_name: "window-new-symbolic" }));
-
-      const prBtn = new Gtk.Button({
-        icon_name: "go-next-symbolic",
-        valign: Gtk.Align.CENTER,
-        css_classes: ["flat"],
-      });
-      prBtn.connect("clicked", () => {
-        Gio.AppInfo.launch_default_for_uri(
-          "https://github.com/InledGroup/codexbar-gnome",
-          null,
-        );
-      });
-      prRow.add_suffix(prBtn);
-      group.add(prRow);
-
-      // Review on GNOME Extensions
-      const reviewRow = new Adw.ActionRow({
-        title: _("Leave a Review"),
-        subtitle: _(
-          "Rate the extension on EGO or share on social media.",
-        ),
-      });
-      reviewRow.add_prefix(new Gtk.Image({ icon_name: "starred-symbolic" }));
-
-      const reviewBtn = new Gtk.Button({
-        icon_name: "go-next-symbolic",
-        valign: Gtk.Align.CENTER,
-        css_classes: ["flat"],
-      });
-      reviewBtn.connect("clicked", () => {
-        Gio.AppInfo.launch_default_for_uri(
-          "https://extensions.gnome.org/extension/9841/codexbar/",
-          null,
-        );
-      });
-      reviewRow.add_suffix(reviewBtn);
-      group.add(reviewRow);
-
-      // Contact Inled
-      const contactRow = new Adw.ActionRow({
-        title: _("Contact Inled"),
-        subtitle: _("Questions? Suggestions? Write to us at hi@inled.es"),
-      });
-      contactRow.add_prefix(
-        new Gtk.Image({ icon_name: "mail-message-new-symbolic" }),
-      );
-
-      const contactBtn = new Gtk.Button({
-        icon_name: "go-next-symbolic",
-        valign: Gtk.Align.CENTER,
-        css_classes: ["flat"],
-      });
-      contactBtn.connect("clicked", () => {
-        Gio.AppInfo.launch_default_for_uri("mailto:hi@inled.es", null);
-      });
-      contactRow.add_suffix(contactBtn);
-      group.add(contactRow);
-
-      // Visit Website
-      const webRow = new Adw.ActionRow({
-        title: _("Visit inled.es"),
-        subtitle: _(
-          "Discover more tools and projects that might interest you!",
-        ),
-      });
-      webRow.add_prefix(new Gtk.Image({ icon_name: "web-browser-symbolic" }));
-
-      const webBtn = new Gtk.Button({
-        icon_name: "go-next-symbolic",
-        valign: Gtk.Align.CENTER,
-        css_classes: ["suggested-action"],
-      });
-      webBtn.connect("clicked", () => {
-        Gio.AppInfo.launch_default_for_uri("https://inled.es", null);
-      });
-      webRow.add_suffix(webBtn);
-      group.add(webRow);
-
-      // Social Media
-      const socialRow = new Adw.ActionRow({
-        title: _("Join the Community"),
-        subtitle: _("¡We have new Discord and Matrix channels!"),
-      });
-      socialRow.add_prefix(
-        new Gtk.Image({ icon_name: "system-users-symbolic" }),
-      );
-
-      const socialBox = new Gtk.Box({
-        orientation: Gtk.Orientation.HORIZONTAL,
-        spacing: 12,
-        valign: Gtk.Align.CENTER,
-      });
-
-      const createSocialBtn = (name, url, tooltip) => {
-        const iconPath = GLib.build_filenamev([
-          this._extensionPath,
-          "media",
-          "logos",
-          `${name}-symbolic.svg`,
-        ]);
-        const btn = new Gtk.Button({
+      const links = [
+        {
+          title: _("Report an Issue"),
+          subtitle: _("Report bugs or suggest improvements for this fork on GitHub."),
+          icon: "dialog-question-symbolic",
+          url: "https://github.com/OshriFatkiev/codexbar-gnome/issues",
+        },
+        {
+          title: _("Contribute"),
+          subtitle: _("Submit a pull request to this maintained fork."),
+          icon: "window-new-symbolic",
+          url: "https://github.com/OshriFatkiev/codexbar-gnome/pulls",
+        },
+        {
+          title: _("Upstream Project"),
+          subtitle: _("Originally created by InledGroup and contributors."),
+          icon: "web-browser-symbolic",
+          url: "https://github.com/InledGroup/codexbar-gnome",
+        },
+      ];
+      for (const { title, subtitle, icon, url } of links) {
+        const row = new Adw.ActionRow({ title, subtitle });
+        row.add_prefix(new Gtk.Image({ icon_name: icon }));
+        const button = new Gtk.Button({
+          icon_name: "go-next-symbolic",
+          valign: Gtk.Align.CENTER,
           css_classes: ["flat"],
-          tooltip_text: tooltip,
+          tooltip_text: title,
         });
-        if (GLib.file_test(iconPath, GLib.FileTest.EXISTS)) {
-          const gicon = Gio.Icon.new_for_string(iconPath);
-          btn.set_child(new Gtk.Image({ gicon: gicon }));
-        } else {
-          btn.set_label(tooltip);
-        }
-        btn.connect("clicked", () => {
+        button.connect("clicked", () => {
           Gio.AppInfo.launch_default_for_uri(url, null);
         });
-        return btn;
-      };
-
-      socialBox.append(
-        createSocialBtn(
-          "discord",
-          "https://discord.com/invite/PSeTkDMnr",
-          "Discord",
-        ),
-      );
-      socialBox.append(
-        createSocialBtn(
-          "matrix",
-          "https://matrix.to/#/!POXBFohLnmrKwRBxTi:matrix.org?via=matrix.org",
-          "Matrix",
-        ),
-      );
-      socialBox.append(
-        createSocialBtn(
-          "mastodon",
-          "https://mastodon.social/@inled",
-          "Mastodon",
-        ),
-      );
-      socialBox.append(
-        createSocialBtn(
-          "youtube",
-          "https://www.youtube.com/@inledgroup",
-          "YouTube",
-        ),
-      );
-      socialBox.append(
-        createSocialBtn("x", "https://x.com/inledgroup", "X (Twitter)"),
-      );
-
-      socialRow.add_suffix(socialBox);
-      group.add(socialRow);
-
+        row.add_suffix(button);
+        group.add(row);
+      }
       return group;
     }
 

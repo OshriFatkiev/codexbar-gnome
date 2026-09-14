@@ -1,10 +1,8 @@
-# CodexBar for GNOME — maintained fork
+# CodexBar for GNOME
 
 This is [OshriFatkiev’s maintained fork](https://github.com/OshriFatkiev/codexbar-gnome) of [InledGroup’s CodexBar GNOME extension](https://github.com/InledGroup/codexbar-gnome). It shows AI provider quotas in the GNOME panel, using the [CodexBar CLI](https://github.com/steipete/CodexBar) for most provider connections and built-in fetchers for direct Codex and Ollama connections.
 
 The extension is still named **CodexBar**. This fork is maintained independently; report problems with this version in [this repository’s issues](https://github.com/OshriFatkiev/codexbar-gnome/issues).
-
-![CodexBar panel with provider logos, remaining quota percentages, and usage bars](media/panel-preview.png)
 
 ## What this fork adds
 

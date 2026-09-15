@@ -8,6 +8,7 @@ The extension is still named **CodexBar**. This fork is maintained independently
 
 - Separate provider logos and quota bars, equal bar widths, and compact spacing. Show all providers or the selected provider’s windows.
 - Remaining or used quota display, with an exhausted window kept visible even when another window has quota left.
+- Only the provider logo appears during initial loading, with one quota slot reserved. Hidden or missing logos leave blank space. Existing quotas stay visible during refreshes; completed errors or unusable results show the unavailable marker.
 - Popup quota bars follow the GNOME Shell theme's slider colors for both the fill and the empty track, at every quota level. They update when the Shell theme changes, including on GNOME 46; themes missing these colors fall back to blue and a neutral track.
 - Local reset times such as `14:30`, `Fri 14:30`, or `Sep 15 14:30` when a limit is fully exhausted, with the provider logo dimmed to 60% opacity. The desktop’s 12/24-hour preference is respected.
 - Reorderable providers, collapsed provider settings, and provider-specific connection choices that preserve custom commands and visibly flag unsupported saved choices.

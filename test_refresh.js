@@ -72,6 +72,37 @@ function fixture(providers, fetchCli, loadToken = async () => "test-cookie") {
 }
 
 const tests = [
+  ["the initial refresh has no result until the request completes", async () => {
+    const pending = deferred();
+    const state = fixture([provider("a")], () => pending.promise);
+    const run = state.extension._refreshData();
+    equal(state.extension._loading, true, "A pending initial request is marked loading");
+    equal(state.extension._providersData[0], undefined, "No result placeholder is published during loading");
+    pending.resolve();
+    await run;
+    equal(state.extension._loading, false, "Completion clears the loading state");
+    equal(state.extension._providersData[0].data.usage, usage("a"), "Completion publishes the actual quota");
+  }],
+  ["regular refreshes retain cached quota or errors until replacement", async () => {
+    for (const [cached, fails] of [
+      [{ data: { usage: usage("cached") } }, false],
+      [{ data: { usage: usage("cached") } }, true],
+      [{ error: "Previous failure" }, false],
+    ]) {
+      const pending = deferred();
+      const state = fixture([provider("a")], () => pending.promise);
+      state.extension._providersData = [cached];
+      const run = state.extension._refreshData();
+      equal(state.extension._loading, true, "Refresh is pending");
+      equal(state.extension._providersData[0], cached, "The current result is preserved while awaiting a replacement");
+      if (fails) pending.reject(new Error("New failure"));
+      else pending.resolve();
+      await run;
+      equal(state.extension._loading, false, "Completion clears the loading state");
+      if (fails) equal(state.extension._providersData[0].error, "New failure", "A failed refresh publishes unavailability");
+      else equal(state.extension._providersData[0].data.usage, usage("a"), "A successful refresh replaces the cached result");
+    }
+  }],
   ["reordering during a CLI fetch never relabels another provider's data", async () => {
     const pending = deferred();
     const state = fixture([provider("a"), provider("b")], () => pending.promise);

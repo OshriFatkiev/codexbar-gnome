@@ -1445,7 +1445,7 @@ export default class CodexBarExtension extends Extension {
   /**
    * Populate one panel group with a provider's logo and windows.
    * @param {number} index Group index.
-   * @param {{provider: object, windows: Array}} entry
+   * @param {{provider: object, windows: Array, loading: boolean}} entry
    */
   _fillPanelGroup(index, entry, nowMs = Date.now()) {
     const group = this._panelGroups[index];
@@ -1475,7 +1475,10 @@ export default class CodexBarExtension extends Extension {
 
     group.metrics.forEach((metric, i) => {
       const win = entry.windows[i];
-      setVisible(metric.box, !!win);
+      setVisible(metric.box, !!win || (i === 0 && entry.windows.length === 0));
+      // Keep one slot in the layout during the first fetch, but paint neither
+      // its text nor its track. Reused metrics must recover when results arrive.
+      metric.box.opacity = entry.loading ? 0 : 255;
       if (!win) return;
       const text = this._panelMetricText(win, nowMs);
       if (metric.label.get_text() !== text) metric.label.set_text(text);
@@ -1483,11 +1486,10 @@ export default class CodexBarExtension extends Extension {
       this._applyMetricFill(metric);
     });
 
-    // A provider with no usable windows still shows its logo, so a failed
-    // fetch reads as "no data" rather than the provider silently vanishing.
+    // Pending providers keep this placeholder's geometry without painting it.
+    // Once a result arrives, unusable data still shows the unavailable marker.
     if (entry.windows.length === 0) {
       const metric = group.metrics[0];
-      setVisible(metric.box, true);
       if (metric.label.get_text() !== "—") metric.label.set_text("—");
       metric.percent = 0;
       this._applyMetricFill(metric);
@@ -1517,11 +1519,14 @@ export default class CodexBarExtension extends Extension {
     const entries = showAll
       ? this._providers.map((provider, i) => ({
           provider,
+          loading: !!this._loading && !this._providersData[i],
           windows: this._panelWindows(this._providersData[i], displayMode, 1, nowMs),
         }))
       : [
           {
             provider: this._providers[this._activeProviderIndex],
+            loading: !!this._providers[this._activeProviderIndex] &&
+              !!this._loading && !this._providersData[this._activeProviderIndex],
             windows: this._panelWindows(
               this._providersData[this._activeProviderIndex],
               displayMode,

@@ -184,8 +184,16 @@ const actor = () => ({
   visible: false, opacity: 255, destroy() {},
   set_child(child) { this.child = child; },
 });
-const label = () => ({ text: "", get_text() { return this.text; }, set_text(text) { this.text = text; } });
-const panelMetric = () => ({ box: actor(), label: label() });
+const label = () => ({
+  text: "", naturalWidth: 24,
+  get_text() { return this.text; },
+  set_text(text) { this.text = text; },
+  get_preferred_width() { return [0, this.naturalWidth]; },
+});
+const panelMetric = () => ({
+  box: actor(), label: label(),
+  track: { width: 40, get_width() { return this.width; }, set_width(width) { this.width = width; } },
+});
 const panelGroup = () => ({
   box: actor(), logoId: null, logoBin: actor(), metrics: [panelMetric(), panelMetric()],
 });
@@ -303,6 +311,103 @@ for (const [format, expected] of [["absolute", "14:30"], ["remaining", "2h29m"]]
   }
 }
 console.log("PASS: logo exhaustion, recovery, provider changes, and hidden-logo reset text");
+
+// Keep the real sizing method: an invisible loading metric must still reserve
+// the same measured width as a populated one, including widths shared by groups.
+extension._syncTrackWidths = Extension.prototype._syncTrackWidths;
+extension._panelMeasureLabel = { ensure_style() {}, get_preferred_width: () => [0, 54] };
+showLogo = true;
+for (const mode of ["remaining", "used"]) {
+  for (const layout of ["active", "all"]) {
+    panelProviders = layout;
+    extension._providers = [alpha, beta];
+    extension._activeProviderIndex = 0;
+    extension._providersData = [];
+    extension._loading = true;
+    extension._updatePanel(mode);
+    const groups = extension._panelGroups.filter((group) => group.box.visible);
+    equal(groups.length, layout === "all" ? 2 : 1, "Loading preserves the provider layout");
+    for (const group of groups) {
+      equal([group.logoBin.visible, group.logoBin.opacity], [true, 255], "Loading keeps a full-brightness logo");
+      equal([group.metrics[0].box.visible, group.metrics[0].box.opacity], [true, 0],
+        "Loading reserves its metric but paints neither text nor track");
+      equal(group.metrics[0].track.width, 54, "Transparent loading tracks keep the measured width");
+      equal(group.metrics[1].box.visible, false, "Loading reserves exactly one metric slot");
+    }
+    equal(timers.size, 0, "Loading never starts a reset timer");
+
+    extension._providersData = [
+      data(window(30, 18000, today), window(40, 604800, friday)), healthy,
+    ];
+    extension._loading = false;
+    extension._updatePanel(mode);
+    equal([renderedMetric.box.visible, renderedMetric.box.opacity], [true, 255], "Data reveals the first metric");
+    equal(renderedMetric.track.width, 54, "The first result preserves the reserved width");
+    const second = extension._panelGroups[0].metrics[1];
+    equal(second.box.visible, layout === "active", "A second window expands only the active-provider layout");
+    equal(second.box.opacity, 255, "Reused second metrics regain normal opacity");
+    const cachedText = renderedMetric.label.text;
+    extension._loading = true;
+    extension._updatePanel(mode);
+    equal([renderedMetric.label.text, renderedMetric.box.opacity], [cachedText, 255],
+      "A regular refresh keeps the cached quota visible");
+
+    for (const result of [{ error: "Unavailable" }, { data: { usage: {} } }]) {
+      extension._providersData[0] = undefined;
+      extension._updatePanel(mode);
+      extension._providersData[0] = result;
+      extension._loading = false;
+      extension._updatePanel(mode);
+      equal([renderedMetric.label.text, renderedMetric.box.opacity], ["—", 255],
+        "Completed errors and unusable results restore the unavailable presentation");
+      equal(logoBin.opacity, 255, "Unavailable results keep the logo bright");
+      extension._loading = true;
+      extension._updatePanel(mode);
+      equal(renderedMetric.box.opacity, 255, "Existing unavailable results remain visible during retries");
+    }
+  }
+}
+
+panelProviders = "all";
+extension._providers = [alpha, beta];
+extension._providersData = [healthy, undefined];
+extension._updatePanel("remaining");
+equal(extension._panelGroups.map((group) => group.metrics[0].box.opacity), [255, 0],
+  "A global refresh hides only providers without a result");
+renderedMetric.label.naturalWidth = 72;
+extension._syncTrackWidths();
+equal(extension._panelGroups.map((group) => group.metrics[0].track.width), [72, 72],
+  "A loading metric shares the width of a longer visible label");
+renderedMetric.label.naturalWidth = 24;
+extension._providers = [beta, alpha];
+extension._providersData.reverse();
+extension._updatePanel("remaining");
+equal(extension._panelGroups.map((group) => [group.logoId, group.metrics[0].box.opacity]),
+  [["beta", 0], ["alpha", 255]], "Reordering keeps loading state with the provider");
+panelProviders = "active";
+for (const index of [1, 0, 1]) {
+  extension._activeProviderIndex = index;
+  extension._updatePanel("remaining");
+  equal(renderedMetric.box.opacity, index === 1 ? 255 : 0, "Switching the active provider restores metric opacity");
+}
+
+extension._activeProviderIndex = 0;
+for (const [provider, logosEnabled] of [[alpha, false], [{ id: "missing", name: "Custom" }, true]]) {
+  showLogo = logosEnabled;
+  extension._providers = [provider];
+  extension._providersData = [];
+  extension._updatePanel("remaining");
+  equal([logoBin.visible, renderedMetric.box.visible, renderedMetric.box.opacity], [false, true, 0],
+    "Missing or disabled logos leave blank reserved space");
+  equal(renderedMetric.track.width, 54, "Blank loading groups still reserve the measured width");
+}
+extension._panelFallbackIcon = actor();
+extension._providers = [];
+extension._updatePanel("remaining");
+equal(extension._panelFallbackIcon.visible, true, "No providers still shows the existing fallback icon");
+equal(renderedMetric.box.opacity, 255, "No provider is not a pending provider result");
+extension._loading = false;
+console.log("PASS: loading visibility, cached data, result transitions, and reserved widths");
 
 showLogo = true;
 extension._providers = [alpha];

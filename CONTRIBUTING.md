@@ -19,6 +19,7 @@ On a GNOME development machine with GJS, the installer build tools listed in the
 gjs -m test_all_providers.js &&
 gjs -m test_panel.js &&
 gjs -m test_panel_reset.js &&
+gjs -m test_popup_bars.js &&
 gjs -m test_refresh.js &&
 gjs -m test_provider_sources.js &&
 gjs -m test_cli_fetcher.js &&
@@ -27,7 +28,7 @@ bash build.sh &&
 git diff --check
 ```
 
-The GJS tests exercise normalization, provider selection, refresh ownership, CLI calls, and panel behavior. The installer tests use temporary directories and stub GNOME commands. `build.sh` validates schemas and the packaged archive. Report which checks you ran and any limitations; a declared Shell version is not proof of testing on it.
+The GJS tests exercise normalization, provider selection, refresh ownership, CLI calls, panel behavior, and popup bar theme updates. The installer tests use temporary directories and stub GNOME commands. `build.sh` validates schemas and the packaged archive. Report which checks you ran and any limitations; a declared Shell version is not proof of testing on it.
 
 Add meaningful regression coverage when behavior changes. Provider parsing cases belong in `test_all_providers.js`; use the existing focused tests for panel, refresh, source, and CLI behavior. Avoid tests that merely check incidental wording or styling constants.
 

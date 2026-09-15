@@ -857,9 +857,6 @@ export default class CodexBarExtension extends Extension {
           }),
         );
 
-        let progressContainer = new St.BoxLayout({
-          style_class: "codexbar-progress-container",
-        });
         let p = this._normalizePercent(tierData.usedPercent);
 
         let percent = displayMode === "remaining" ? 100 - p : p;
@@ -868,26 +865,7 @@ export default class CodexBarExtension extends Extension {
             ? _("%s%% left").format(percent.toFixed(1))
             : _("%s%% used").format(percent.toFixed(1));
 
-        let color = "#3584e4";
-        if (displayMode === "remaining") {
-          if (percent < 10) color = "#e01b24";
-          else if (percent < 25) color = "#ff7800";
-          else if (percent < 50) color = "#f6d32d";
-        } else {
-          if (percent > 90) color = "#e01b24";
-          else if (percent > 75) color = "#ff7800";
-          else if (percent > 50) color = "#f6d32d";
-        }
-
-        const fullWidth = 290;
-        const barWidth = Math.max(1, Math.round((percent / 100) * fullWidth));
-
-        let progressBar = new St.Widget({
-          style_class: "codexbar-progress-bar",
-          style: `width: ${barWidth}px; background-color: ${color};`,
-        });
-        progressContainer.add_child(progressBar);
-        this._contentBox.add_child(progressContainer);
+        this._contentBox.add_child(this._buildPopupProgressBar(percent));
 
         const statsBox = new St.BoxLayout({ vertical: false, x_expand: true });
         statsBox.add_child(subtitleLabel({ text: labelText }));
@@ -1012,6 +990,78 @@ export default class CodexBarExtension extends Extension {
     }
 
     this._renderUpdatedAt(usage);
+  }
+
+  /**
+   * Build a popup quota bar using the Shell slider's fill and track colors.
+   * A hidden probe reads the theme without importing slider sizing or padding.
+   * @param {number} percent Displayed percentage, already clamped to 0–100.
+   * @returns {St.BoxLayout}
+   */
+  _buildPopupProgressBar(percent) {
+    const container = new St.BoxLayout({
+      style_class: "codexbar-progress-container",
+    });
+    const barWidth = Math.max(1, Math.round((percent / 100) * 290));
+    // Keep width in CSS so it follows the Shell's scale factor as before.
+    const widthStyle = `width: ${barWidth}px;`;
+    const fill = new St.Widget({
+      style_class: "codexbar-progress-bar",
+      style: widthStyle,
+    });
+    const probe = new St.Widget({
+      style_class: "slider",
+      visible: false,
+      reactive: false,
+      can_focus: false,
+    });
+    // Nonreactive St widgets get :insensitive; sample an enabled slider instead.
+    probe.remove_style_pseudo_class("insensitive");
+    container.add_child(fill);
+    container.add_child(probe);
+
+    let updating = false;
+    const updateColors = () => {
+      // Reading a theme node before stage attachment is invalid in St.
+      if (updating || !container.mapped || !container.get_stage()) return;
+      updating = true;
+      try {
+        let node = null;
+        try {
+          probe.ensure_style();
+          node = probe.get_theme_node();
+        } catch (e) {
+          // Use stylesheet fallbacks until mapping or a theme change retries.
+        }
+        const colorStyle = (property) => {
+          try {
+            const [found, color] = node?.lookup_color(property, false) ?? [];
+            if (found && color) {
+              return `background-color: rgba(${color.red}, ${color.green}, ${color.blue}, ${color.alpha / 255});`;
+            }
+          } catch (e) {
+            // A custom theme may expose only one of the two slider colors.
+          }
+          return "";
+        };
+        const styles = [
+          [container, colorStyle("-barlevel-background-color")],
+          [fill, `${widthStyle} ${colorStyle("-barlevel-active-background-color")}`.trim()],
+        ];
+        for (const [actor, style] of styles) {
+          if ((actor.get_style() || "") !== style) actor.set_style(style);
+        }
+      } finally {
+        updating = false;
+      }
+    };
+
+    container.connect("notify::mapped", updateColors);
+    probe.connect("style-changed", updateColors);
+    const themeContext = St.ThemeContext.get_for_stage(global.stage);
+    const themeChangedId = themeContext.connect("changed", updateColors);
+    container.connect("destroy", () => themeContext.disconnect(themeChangedId));
+    return container;
   }
 
   /**

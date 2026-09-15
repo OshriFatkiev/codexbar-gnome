@@ -66,6 +66,7 @@
 .codexbar-progress-bar {
     height: 6px;
     border-radius: 3px;
+    background-color: #3584e4;
 }
 
 .codexbar-reset-credits {

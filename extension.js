@@ -93,7 +93,8 @@ export default class CodexBarExtension extends Extension {
 
     // Main indicator button in the panel
     // El botón principal (el del uso)
-    this._indicator = new PanelMenu.Button(0.0, _("CodexBar"), false);
+    // Center the popup below the indicator; Shell keeps it within the work area.
+    this._indicator = new PanelMenu.Button(0.5, _("CodexBar"), false);
 
     // Panel content: one group per provider shown, e.g. [logo] 5h 51% 7d 60%.
     this._panelBox = new St.BoxLayout({

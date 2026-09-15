@@ -1177,7 +1177,10 @@ export default class CodexBarExtension extends Extension {
       y_align: Clutter.ActorAlign.CENTER,
       style_class: "codexbar-panel-metric",
     });
-    const label = new St.Label({ style_class: "codexbar-panel-label" });
+    const label = new St.Label({
+      style_class: "codexbar-panel-label",
+      x_align: Clutter.ActorAlign.CENTER,
+    });
     const track = new St.BoxLayout({
       style_class: "codexbar-panel-track",
       // Not x_expand: the track takes its fixed width from the stylesheet so
